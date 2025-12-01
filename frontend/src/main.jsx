@@ -6,7 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { store } from './store/store'
 import './index.css'
-
+//git
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Provider store={store}>
