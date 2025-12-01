@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import axios from 'axios'
-
-const API_URL = '/api'
+import { API_URL } from '../../config/api'
 
 export const fetchStudentLocations = createAsyncThunk(
   'parent/students/locations',
