@@ -33,6 +33,9 @@ const createAdmin = async () => {
     console.log('Password: admin123');
     console.log('\n⚠️  Please change the password after first login!\n');
 
+    // Close connection
+    await mongoose.connection.close();
+    console.log('Database connection closed.');
     process.exit(0);
   } catch (error) {
     console.error('Error creating admin:', error);

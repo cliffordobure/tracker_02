@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
 import ManagerLayout from '../../components/layouts/ManagerLayout'
+import MapPicker from '../../components/MapPicker'
 import { fetchStudents, createStudent, updateStudent, deleteStudent } from '../../store/slices/managerStudentsSlice'
 import api from '../../services/api'
 
@@ -13,12 +14,16 @@ const Students = () => {
   const [editingStudent, setEditingStudent] = useState(null)
   const [routes, setRoutes] = useState([])
   const [parents, setParents] = useState([])
+  const [stops, setStops] = useState([])
+  const [locationMethod, setLocationMethod] = useState('stop') // 'stop' or 'map'
+  const [createNewStop, setCreateNewStop] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     grade: '',
     address: '',
     latitude: '',
     longitude: '',
+    stop: '', // Selected stop ID
     route: '',
     parents: [],
     status: 'Active'
@@ -28,6 +33,7 @@ const Students = () => {
     dispatch(fetchStudents())
     fetchRoutes()
     fetchParents()
+    fetchStops()
   }, [dispatch])
 
   const fetchRoutes = async () => {
@@ -48,15 +54,84 @@ const Students = () => {
     }
   }
 
+  const fetchStops = async () => {
+    try {
+      const response = await api.get('/stops')
+      setStops(response.data || [])
+    } catch (error) {
+      console.error('Failed to fetch stops:', error)
+    }
+  }
+
+  const handleLocationChange = (lat, lng) => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      stop: '' // Clear stop selection when using map
+    }))
+  }
+
+  const handleStopSelect = (stopId) => {
+    const selectedStop = stops.find(s => s._id === stopId)
+    if (selectedStop) {
+      setFormData({
+        ...formData,
+        stop: stopId,
+        latitude: selectedStop.latitude ? selectedStop.latitude.toString() : '',
+        longitude: selectedStop.longitude ? selectedStop.longitude.toString() : '',
+        address: selectedStop.address || formData.address
+      })
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
     try {
+      let stopId = null
+      let finalLatitude = formData.latitude
+      let finalLongitude = formData.longitude
+      let finalAddress = formData.address
+
+      // If location method is map and createNewStop is checked, create a new stop
+      if (locationMethod === 'map' && createNewStop && formData.latitude && formData.longitude) {
+        try {
+          // Create a new stop from the map location
+          const stopName = formData.name ? `${formData.name}'s Stop` : `Stop at ${formData.address || 'Location'}`
+          const stopResponse = await api.post('/stops', {
+            name: stopName,
+            address: formData.address || '',
+            latitude: parseFloat(formData.latitude),
+            longitude: parseFloat(formData.longitude),
+            order: stops.length + 1
+          })
+          stopId = stopResponse.data.stop._id
+          toast.success('New stop created automatically!')
+        } catch (error) {
+          console.error('Failed to create stop:', error)
+          toast.error('Failed to create stop, but continuing with student creation...')
+        }
+      } else if (locationMethod === 'stop' && formData.stop) {
+        // If using existing stop, get its location
+        const selectedStop = stops.find(s => s._id === formData.stop)
+        if (selectedStop) {
+          finalLatitude = selectedStop.latitude
+          finalLongitude = selectedStop.longitude
+          finalAddress = selectedStop.address || formData.address
+          stopId = formData.stop
+        }
+      }
+
       const data = {
-        ...formData,
-        latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
-        longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
+        name: formData.name,
+        grade: formData.grade,
+        address: finalAddress,
+        latitude: finalLatitude ? parseFloat(finalLatitude) : undefined,
+        longitude: finalLongitude ? parseFloat(finalLongitude) : undefined,
         route: formData.route || undefined,
-        parents: formData.parents || []
+        parents: formData.parents || [],
+        status: formData.status
       }
 
       if (editingStudent) {
@@ -65,6 +140,10 @@ const Students = () => {
       } else {
         await dispatch(createStudent(data)).unwrap()
         toast.success('Student created successfully!')
+        // Refresh stops if a new one was created
+        if (stopId && createNewStop) {
+          fetchStops()
+        }
       }
       setShowModal(false)
       resetForm()
@@ -76,16 +155,26 @@ const Students = () => {
 
   const handleEdit = (student) => {
     setEditingStudent(student)
+    
+    // Try to find matching stop for this student
+    const matchingStop = stops.find(s => 
+      s.latitude === student.latitude && s.longitude === student.longitude
+    )
+    
     setFormData({
       name: student.name || '',
       grade: student.grade || '',
       address: student.address || '',
-      latitude: student.latitude || '',
-      longitude: student.longitude || '',
+      latitude: student.latitude ? student.latitude.toString() : '',
+      longitude: student.longitude ? student.longitude.toString() : '',
+      stop: matchingStop?._id || '',
       route: student.route?._id || student.route || '',
       parents: student.parents?.map(p => p._id || p) || [],
       status: student.status || 'Active'
     })
+    
+    // Set location method based on whether we found a matching stop
+    setLocationMethod(matchingStop ? 'stop' : 'map')
     setShowModal(true)
   }
 
@@ -108,10 +197,13 @@ const Students = () => {
       address: '',
       latitude: '',
       longitude: '',
+      stop: '',
       route: '',
       parents: [],
       status: 'Active'
     })
+    setLocationMethod('stop')
+    setCreateNewStop(false)
     setEditingStudent(null)
   }
 
@@ -214,7 +306,7 @@ const Students = () => {
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h2 className="text-2xl font-bold mb-4">
                 {editingStudent ? 'Edit Student' : 'Add New Student'}
               </h2>
@@ -248,26 +340,99 @@ const Students = () => {
                       className="input"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Latitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.latitude}
-                      onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                      className="input"
-                    />
+                  
+                  {/* Location Selection Method */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Location Method</label>
+                    <div className="flex gap-4 mb-4">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="locationMethod"
+                          value="stop"
+                          checked={locationMethod === 'stop'}
+                          onChange={(e) => {
+                            setLocationMethod('stop')
+                            setCreateNewStop(false)
+                            if (formData.stop) {
+                              handleStopSelect(formData.stop)
+                            }
+                          }}
+                          className="form-radio"
+                        />
+                        <span className="text-sm text-gray-700">Select from Existing Stops</span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="locationMethod"
+                          value="map"
+                          checked={locationMethod === 'map'}
+                          onChange={(e) => setLocationMethod('map')}
+                          className="form-radio"
+                        />
+                        <span className="text-sm text-gray-700">Pick from Map</span>
+                      </label>
+                    </div>
+
+                    {/* Option 1: Select from Existing Stops */}
+                    {locationMethod === 'stop' && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Select Stop</label>
+                        <select
+                          value={formData.stop}
+                          onChange={(e) => handleStopSelect(e.target.value)}
+                          className="input"
+                        >
+                          <option value="">Select a Stop</option>
+                          {stops.map((stop) => (
+                            <option key={stop._id} value={stop._id}>
+                              {stop.name} {stop.address ? `(${stop.address})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {stops.length === 0 && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            No stops available. Create stops first or use "Pick from Map" option.
+                          </p>
+                        )}
+                        {formData.stop && (
+                          <p className="text-xs text-gray-600 mt-2">
+                            Location will be set from selected stop: {formData.latitude ? `${parseFloat(formData.latitude).toFixed(6)}, ${parseFloat(formData.longitude).toFixed(6)}` : 'Loading...'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Option 2: Pick from Map */}
+                    {locationMethod === 'map' && (
+                      <div className="mb-4">
+                        <MapPicker
+                          latitude={formData.latitude}
+                          longitude={formData.longitude}
+                          onLocationChange={handleLocationChange}
+                          height="400px"
+                        />
+                        <label className="flex items-center space-x-2 mt-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={createNewStop}
+                            onChange={(e) => setCreateNewStop(e.target.checked)}
+                            className="rounded"
+                          />
+                          <span className="text-sm text-gray-700">
+                            Automatically create a new stop at this location
+                          </span>
+                        </label>
+                        {createNewStop && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            A new stop will be created with the name "{formData.name ? `${formData.name}'s Stop` : 'New Stop'}" at this location.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Longitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.longitude}
-                      onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                      className="input"
-                    />
-                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Route</label>
                     <select
@@ -341,4 +506,3 @@ const Students = () => {
 }
 
 export default Students
-

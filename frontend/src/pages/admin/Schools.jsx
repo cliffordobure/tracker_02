@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import AdminLayout from '../../components/layouts/AdminLayout'
+import MapPicker from '../../components/MapPicker'
 import { fetchSchools, createSchool, updateSchool, deleteSchool } from '../../store/slices/schoolsSlice'
 import api from '../../services/api'
 
@@ -30,6 +31,13 @@ const Schools = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    // Validate location is selected (optional validation - remove if location is not required)
+    // if (!formData.latitude || !formData.longitude) {
+    //   toast.error('Please select a location on the map')
+    //   return
+    // }
+    
     try {
       const data = {
         ...formData,
@@ -52,6 +60,14 @@ const Schools = () => {
     }
   }
 
+  const handleLocationChange = (lat, lng) => {
+    setFormData({
+      ...formData,
+      latitude: lat.toString(),
+      longitude: lng.toString()
+    })
+  }
+
   const handleEdit = (school) => {
     setEditingSchool(school)
     setFormData({
@@ -61,8 +77,8 @@ const Schools = () => {
       county: school.county || '',
       phone: school.phone || '',
       email: school.email || '',
-      latitude: school.latitude || '',
-      longitude: school.longitude || '',
+      latitude: school.latitude ? school.latitude.toString() : '',
+      longitude: school.longitude ? school.longitude.toString() : '',
       status: school.status || 'Active'
     })
     setShowModal(true)
@@ -197,7 +213,7 @@ const Schools = () => {
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h2 className="text-2xl font-bold mb-4">
                 {editingSchool ? 'Edit School' : 'Add New School'}
               </h2>
@@ -283,31 +299,23 @@ const Schools = () => {
                       className="input"
                     />
                   </div>
-                  <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Latitude
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={formData.latitude}
-                        onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                        className="input"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Longitude
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={formData.longitude}
-                        onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                        className="input"
-                      />
-                    </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">School Location (Select on Map)</label>
+                    <MapPicker
+                      latitude={formData.latitude}
+                      longitude={formData.longitude}
+                      onLocationChange={handleLocationChange}
+                      height="400px"
+                    />
+                    {/* Hidden inputs for form validation */}
+                    <input
+                      type="hidden"
+                      value={formData.latitude}
+                    />
+                    <input
+                      type="hidden"
+                      value={formData.longitude}
+                    />
                   </div>
                 </div>
                 <div className="flex justify-end space-x-4 mt-6">

@@ -9,6 +9,73 @@ const Notification = require('../models/Notification');
 
 router.use(authenticate);
 
+// Get parent profile
+router.get('/profile', async (req, res) => {
+  try {
+    // User ID is extracted from JWT token in authenticate middleware
+    const parentId = req.user._id;
+
+    // Query database for parent
+    const parent = await Parent.findById(parentId).select('_id name email phone photo sid status');
+
+    if (!parent) {
+      return res.status(404).json({
+        success: false,
+        message: 'Parent profile not found',
+        error: 'User not found'
+      });
+    }
+
+    // Check if parent is active (default to 'Active' if status is null/undefined)
+    if (parent.status && parent.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        message: 'Parent account is suspended',
+        error: 'Account suspended'
+      });
+    }
+
+    // Build full photo URL if photo exists
+    let photoUrl = null;
+    if (parent.photo) {
+      // Check if it's already a full URL
+      if (parent.photo.startsWith('http://') || parent.photo.startsWith('https://')) {
+        photoUrl = parent.photo;
+      } else {
+        // Construct full URL from request or use environment variable
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        photoUrl = `${baseUrl}${parent.photo.startsWith('/') ? '' : '/'}${parent.photo}`;
+      }
+    }
+
+    // Return profile in specified format (support both 'user' and 'parent_user' for backward compatibility)
+    const profileData = {
+      id: parent._id.toString(),
+      name: parent.name,
+      email: parent.email || null,
+      phone: parent.phone || null,
+      photo: photoUrl,
+      role: 'parent',
+      sid: parent.sid ? parent.sid.toString() : null
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile retrieved successfully',
+      user: profileData,
+      // Also include parent_user for backward compatibility
+      parent_user: profileData
+    });
+  } catch (error) {
+    console.error('Error fetching parent profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
 // Get parent's students with route and driver info
 router.get('/students', async (req, res) => {
   try {
