@@ -1,0 +1,7 @@
+/vendor
+/logs
+/uploads
+
+tracktoto-parent-firebase-adminsdk.json
+
+.env
