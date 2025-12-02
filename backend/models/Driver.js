@@ -58,6 +58,18 @@ const driverSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Route'
   },
+  journeyStatus: {
+    type: String,
+    enum: ['idle', 'active', 'completed'],
+    default: 'idle'
+  },
+  journeyStartedAt: {
+    type: Date
+  },
+  journeyType: {
+    type: String,
+    enum: ['pickup', 'drop-off']
+  },
   createdAt: {
     type: Date,
     default: Date.now

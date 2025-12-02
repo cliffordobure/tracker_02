@@ -70,46 +70,96 @@ router.get('/route', async (req, res) => {
 // Update driver location (real-time)
 router.post('/location', async (req, res) => {
   try {
+    // Check authentication - must be a driver
     if (req.userRole !== 'driver') {
-      return res.status(403).json({ message: 'Access denied' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied. Only drivers can update location.',
+        error: 'ACCESS_DENIED'
+      });
     }
 
     const { latitude, longitude } = req.body;
 
-    if (!latitude || !longitude) {
-      return res.status(400).json({ message: 'Latitude and longitude are required' });
+    // Validate required fields
+    if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Latitude and longitude are required',
+        error: 'MISSING_COORDINATES'
+      });
     }
 
-    const driver = await Driver.findByIdAndUpdate(
-      req.user._id,
-      { 
-        latitude: parseFloat(latitude), 
-        longitude: parseFloat(longitude),
-        updatedAt: Date.now()
-      },
-      { new: true }
-    ).populate('currentRoute');
+    // Validate coordinate ranges
+    if (isNaN(latitude) || isNaN(longitude)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid coordinates. Latitude and longitude must be numbers.',
+        error: 'INVALID_COORDINATES'
+      });
+    }
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Coordinates out of valid range. Latitude must be -90 to 90, longitude -180 to 180.',
+        error: 'INVALID_COORDINATES'
+      });
+    }
+
+    // Get driver with route info
+    const driver = await Driver.findById(req.user._id).populate('currentRoute');
+
+    if (!driver) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Driver not found',
+        error: 'DRIVER_NOT_FOUND'
+      });
+    }
+
+    // Check driver status
+    if (driver.status && driver.status !== 'Active') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Driver account is suspended. Cannot update location.',
+        error: 'ACCOUNT_SUSPENDED'
+      });
+    }
+
+    // Update driver location
+    driver.latitude = lat;
+    driver.longitude = lng;
+    driver.updatedAt = Date.now();
+    await driver.save();
 
     // Emit location update via socket.io to route-specific room
     const io = getSocketIO();
     const locationData = {
       driverId: driver._id,
       driverName: driver.name,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
+      latitude: lat,
+      longitude: lng,
       routeId: driver.currentRoute?._id,
+      routeName: driver.currentRoute?.name,
       timestamp: new Date().toISOString()
     };
 
     // Broadcast to route room for parents tracking this route
     if (driver.currentRoute) {
       io.to(`route:${driver.currentRoute._id}`).emit('driver-location-update', locationData);
+      // Also emit to driver room
+      io.to(`driver:${driver._id}`).emit('location-update', locationData);
     }
     
     // Also broadcast globally for admin/manager tracking
     io.emit('location-update', locationData);
 
     res.json({ 
+      success: true,
       message: 'Location updated successfully',
       location: {
         latitude: driver.latitude,
@@ -118,7 +168,12 @@ router.post('/location', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Error updating driver location:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while updating location',
+      error: error.message 
+    });
   }
 });
 
@@ -223,10 +278,17 @@ router.post('/journey/start', async (req, res) => {
     // Emit journey start to route room
     io.to(`route:${route._id}`).emit('journey-started', notificationData);
 
+    // Update driver journey status
+    driver.journeyStatus = 'active';
+    driver.journeyStartedAt = new Date();
+    driver.journeyType = journeyType;
+    await driver.save();
+
     // TODO: Send push notifications via FCM
     // You can implement Firebase Cloud Messaging here
 
     res.json({
+      success: true,
       message: 'Journey started successfully',
       journeyType,
       route: {
@@ -234,7 +296,8 @@ router.post('/journey/start', async (req, res) => {
         name: route.name
       },
       studentsCount: route.students.length,
-      notificationsSent: notifications.length
+      notificationsSent: notifications.length,
+      journeyStatus: 'active'
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -407,20 +470,84 @@ router.post('/student/drop', async (req, res) => {
   }
 });
 
+// End journey/trip
+router.post('/journey/end', async (req, res) => {
+  try {
+    if (req.userRole !== 'driver') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied',
+        error: 'ACCESS_DENIED'
+      });
+    }
+
+    const driver = await Driver.findById(req.user._id).populate('currentRoute');
+    
+    if (!driver.currentRoute) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'No route assigned to driver',
+        error: 'NO_ROUTE_ASSIGNED'
+      });
+    }
+
+    const route = await Route.findById(driver.currentRoute._id);
+
+    // Update driver journey status
+    driver.journeyStatus = 'completed';
+    await driver.save();
+
+    // Get Socket.io instance
+    const io = getSocketIO();
+
+    // Emit journey end to route room
+    io.to(`route:${route._id}`).emit('journey-ended', {
+      routeId: route._id,
+      routeName: route.name,
+      driverId: driver._id,
+      driverName: driver.name,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      message: 'Journey ended successfully',
+      route: {
+        id: route._id,
+        name: route.name
+      },
+      journeyStatus: 'completed'
+    });
+  } catch (error) {
+    console.error('Error ending journey:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error',
+      error: error.message 
+    });
+  }
+});
+
 // Get journey status (students picked/dropped count)
 router.get('/journey/status', async (req, res) => {
   try {
     if (req.userRole !== 'driver') {
-      return res.status(403).json({ message: 'Access denied' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied',
+        error: 'ACCESS_DENIED'
+      });
     }
 
     const driver = await Driver.findById(req.user._id).populate('currentRoute');
     
     if (!driver.currentRoute) {
       return res.json({
+        success: true,
         message: 'No route assigned',
         route: null,
-        status: null
+        status: null,
+        journeyStatus: driver.journeyStatus || 'idle'
       });
     }
 
@@ -447,12 +574,14 @@ router.get('/journey/status', async (req, res) => {
     }));
 
     res.json({
+      success: true,
       message: 'success',
       route: {
         id: route._id,
         name: route.name
       },
       journeyType: isMorning ? 'pickup' : 'drop-off',
+      journeyStatus: driver.journeyStatus || 'idle',
       status: {
         total,
         completed,
@@ -462,7 +591,12 @@ router.get('/journey/status', async (req, res) => {
       students
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Error fetching journey status:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error',
+      error: error.message 
+    });
   }
 });
 

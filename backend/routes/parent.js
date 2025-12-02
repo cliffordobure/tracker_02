@@ -300,9 +300,32 @@ router.get('/students/:studentId/driver-location', async (req, res) => {
   try {
     const { studentId } = req.params;
     
+    // Validate studentId format
+    if (!studentId || !studentId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid student ID format',
+        error: 'INVALID_STUDENT_ID'
+      });
+    }
+
     const parent = await Parent.findById(req.user._id);
-    if (!parent.students.includes(studentId)) {
-      return res.status(403).json({ message: 'Access denied' });
+    
+    if (!parent) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Parent not found',
+        error: 'PARENT_NOT_FOUND'
+      });
+    }
+
+    // Verify student belongs to parent
+    if (!parent.students || !parent.students.includes(studentId)) {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied. This student does not belong to you.',
+        error: 'ACCESS_DENIED'
+      });
     }
 
     const student = await Student.findById(studentId)
@@ -310,19 +333,58 @@ router.get('/students/:studentId/driver-location', async (req, res) => {
         path: 'route',
         populate: {
           path: 'driver',
-          select: 'name phone photo latitude longitude vehicleNumber updatedAt'
+          select: 'name phone photo latitude longitude vehicleNumber updatedAt status'
         }
       });
 
-    if (!student || !student.route || !student.route.driver) {
+    if (!student) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Student not found',
+        error: 'STUDENT_NOT_FOUND'
+      });
+    }
+
+    // Check if student has a route assigned
+    if (!student.route) {
       return res.json({
-        message: 'success',
+        success: true,
+        message: 'Student has no route assigned',
+        driver: null
+      });
+    }
+
+    // Check if route has a driver assigned
+    if (!student.route.driver) {
+      return res.json({
+        success: true,
+        message: 'Route has no driver assigned',
         driver: null
       });
     }
 
     const driver = student.route.driver;
+
+    // Check if driver has location data
+    if (driver.latitude === null || driver.latitude === undefined || 
+        driver.longitude === null || driver.longitude === undefined) {
+      return res.json({
+        success: true,
+        message: 'Driver location not available yet',
+        driver: {
+          id: driver._id,
+          name: driver.name,
+          phone: driver.phone,
+          photo: driver.photo,
+          vehicleNumber: driver.vehicleNumber,
+          location: null
+        }
+      });
+    }
+
+    // Return driver location
     res.json({
+      success: true,
       message: 'success',
       driver: {
         id: driver._id,
@@ -333,12 +395,17 @@ router.get('/students/:studentId/driver-location', async (req, res) => {
         location: {
           latitude: driver.latitude,
           longitude: driver.longitude,
-          timestamp: driver.updatedAt
+          timestamp: driver.updatedAt || new Date()
         }
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Error fetching driver location:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while fetching driver location',
+      error: error.message 
+    });
   }
 });
 
