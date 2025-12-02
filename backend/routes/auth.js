@@ -5,6 +5,7 @@ const Admin = require('../models/Admin');
 const Manager = require('../models/Manager');
 const Parent = require('../models/Parent');
 const Driver = require('../models/Driver');
+const Staff = require('../models/Staff');
 
 // Generate JWT Token
 const generateToken = (userId, role) => {
@@ -173,6 +174,57 @@ router.post('/driver/login', async (req, res) => {
         photo: driver.photo,
         role: 'driver',
         sid: driver.sid
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Teacher Login
+router.post('/teacher/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const teacher = await Staff.findOne({ 
+      email, 
+      role: 'teacher',
+      isdelete: false 
+    }).populate('sid');
+
+    if (!teacher) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const isPasswordValid = await teacher.comparePassword(password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    if (teacher.status !== 'Active') {
+      return res.status(403).json({ message: 'Account is suspended' });
+    }
+
+    const token = generateToken(teacher._id, 'teacher');
+
+    // Update device token if provided
+    if (req.body.deviceToken) {
+      teacher.deviceToken = req.body.deviceToken;
+      await teacher.save();
+    }
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: teacher._id,
+        name: teacher.name,
+        email: teacher.email,
+        photo: teacher.photo,
+        role: 'teacher',
+        sid: teacher.sid,
+        assignedClass: teacher.assignedClass,
+        phone: teacher.phone
       }
     });
   } catch (error) {

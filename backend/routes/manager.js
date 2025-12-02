@@ -6,6 +6,7 @@ const Parent = require('../models/Parent');
 const Driver = require('../models/Driver');
 const Route = require('../models/Route');
 const Student = require('../models/Student');
+const Staff = require('../models/Staff');
 
 router.use(authenticate);
 router.use(authorize('manager'));
@@ -240,6 +241,124 @@ router.delete('/drivers/:id', async (req, res) => {
     }
 
     res.json({ message: 'Driver deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ==================== TEACHER MANAGEMENT ====================
+
+// Get all teachers
+router.get('/teachers', async (req, res) => {
+  try {
+    const teachers = await Staff.find({ 
+      sid: req.user.sid,
+      role: 'teacher',
+      isdelete: false
+    })
+      .select('-password')
+      .sort({ createdAt: -1 });
+
+    res.json(teachers);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Create teacher
+router.post('/teachers', async (req, res) => {
+  try {
+    const { name, email, password, phone, photo, assignedClass, permissions } = req.body;
+
+    const existingTeacher = await Staff.findOne({ email });
+    if (existingTeacher) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    const teacher = new Staff({
+      name,
+      email,
+      password,
+      phone,
+      photo: photo || '/uploads/default-teacher.png',
+      sid: req.user.sid,
+      role: 'teacher',
+      assignedClass: assignedClass || null,
+      permissions: permissions || ['noticeboard', 'send', 'receive'],
+      status: 'Active'
+    });
+
+    await teacher.save();
+    const teacherData = teacher.toObject();
+    delete teacherData.password;
+
+    res.status(201).json({ message: 'Teacher created successfully', teacher: teacherData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update teacher
+router.put('/teachers/:id', async (req, res) => {
+  try {
+    const { name, email, phone, photo, assignedClass, permissions, status } = req.body;
+
+    const teacher = await Staff.findById(req.params.id);
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+
+    if (teacher.sid.toString() !== req.user.sid.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (teacher.role !== 'teacher') {
+      return res.status(400).json({ message: 'This is not a teacher account' });
+    }
+
+    if (name) teacher.name = name;
+    if (email && email !== teacher.email) {
+      const existingTeacher = await Staff.findOne({ email });
+      if (existingTeacher) {
+        return res.status(400).json({ message: 'Email already exists' });
+      }
+      teacher.email = email;
+    }
+    if (phone !== undefined) teacher.phone = phone;
+    if (photo) teacher.photo = photo;
+    if (assignedClass !== undefined) teacher.assignedClass = assignedClass;
+    if (permissions) teacher.permissions = permissions;
+    if (status) teacher.status = status;
+    teacher.updatedAt = Date.now();
+
+    await teacher.save();
+    const teacherData = teacher.toObject();
+    delete teacherData.password;
+
+    res.json({ message: 'Teacher updated successfully', teacher: teacherData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete teacher (soft delete)
+router.delete('/teachers/:id', async (req, res) => {
+  try {
+    const teacher = await Staff.findByIdAndUpdate(
+      req.params.id,
+      { isdelete: true },
+      { new: true }
+    );
+
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+
+    if (teacher.sid.toString() !== req.user.sid.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    res.json({ message: 'Teacher deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

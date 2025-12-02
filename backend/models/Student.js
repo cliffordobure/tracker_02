@@ -37,6 +37,14 @@ const studentSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  leftSchool: {
+    type: String, // Timestamp when student left school (set by teacher)
+    default: ''
+  },
+  leftSchoolBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Staff' // Teacher who marked student as leaving
+  },
   route: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Route'

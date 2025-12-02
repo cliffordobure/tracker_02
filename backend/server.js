@@ -138,6 +138,7 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/manager', require('./routes/manager'));
 app.use('/api/parent', require('./routes/parent'));
 app.use('/api/driver', require('./routes/driver'));
+app.use('/api/teacher', require('./routes/teacher'));
 app.use('/api/schools', require('./routes/schools'));
 app.use('/api/students', require('./routes/students'));
 app.use('/api/routes', require('./routes/routes'));

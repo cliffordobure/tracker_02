@@ -3,6 +3,7 @@ const Admin = require('../models/Admin');
 const Manager = require('../models/Manager');
 const Parent = require('../models/Parent');
 const Driver = require('../models/Driver');
+const Staff = require('../models/Staff');
 
 // Verify JWT token and attach user to request
 const authenticate = async (req, res, next) => {
@@ -30,6 +31,12 @@ const authenticate = async (req, res, next) => {
         break;
       case 'driver':
         user = await Driver.findById(decoded.userId).select('-password');
+        break;
+      case 'teacher':
+        user = await Staff.findById(decoded.userId).select('-password');
+        if (!user || user.role !== 'teacher' || user.isdelete) {
+          return res.status(401).json({ message: 'Invalid token.' });
+        }
         break;
       default:
         return res.status(401).json({ message: 'Invalid token.' });

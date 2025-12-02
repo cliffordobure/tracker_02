@@ -32,6 +32,31 @@ const staffSchema = new mongoose.Schema({
     type: String,
     enum: ['dashboard', 'report', 'staff', 'map', 'noticeboard', 'school', 'students', 'parents', 'driver', 'route', 'stops', 'send', 'receive']
   }],
+  role: {
+    type: String,
+    enum: ['staff', 'teacher'],
+    default: 'staff'
+  },
+  assignedClass: {
+    type: String, // e.g., 'PP1', 'PP2', 'Grade 1', etc.
+    trim: true
+  },
+  phone: {
+    type: String,
+    trim: true
+  },
+  photo: {
+    type: String,
+    default: '/uploads/default-teacher.png'
+  },
+  deviceToken: {
+    type: String
+  },
+  status: {
+    type: String,
+    enum: ['Active', 'Suspended'],
+    default: 'Active'
+  },
   isdelete: {
     type: Boolean,
     default: false
