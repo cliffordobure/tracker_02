@@ -13,8 +13,8 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin:  ["http://localhost:49154", "*"]["http://localhost:3000", "*" ],
-    methods: ["GET", "POST"],
+    origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : ["http://localhost:3000", "http://localhost:49154", "*"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true
   },
   transports: ['websocket', 'polling']
@@ -24,9 +24,41 @@ const io = socketIo(server, {
 setSocketIO(io);
 
 // Middleware
+// CORS configuration - allow multiple origins
+const allowedOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
+  : ["http://localhost:3000", "http://localhost:49154"];
+
+// Add production URL if backend is on Render
+if (process.env.RENDER && !allowedOrigins.includes(process.env.RENDER_EXTERNAL_URL)) {
+  // Extract frontend URL from Render (if available)
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  allowedOrigins.push(frontendUrl);
+}
+
 app.use(cors({
-  origin:  "http://localhost:49154"||"http://localhost:3000",
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      // For development, allow localhost on any port
+      if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
+        callback(null, true);
+      } else {
+        // Log for debugging
+        console.log('CORS blocked origin:', origin);
+        console.log('Allowed origins:', allowedOrigins);
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

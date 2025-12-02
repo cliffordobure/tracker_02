@@ -49,3 +49,4 @@ diarySchema.index({ isdelete: 1 });
 
 module.exports = mongoose.model('Diary', diarySchema);
 
+
