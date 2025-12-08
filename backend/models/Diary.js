@@ -29,6 +29,18 @@ const diarySchema = new mongoose.Schema({
     type: String, // File paths or URLs
     trim: true
   }],
+  parentSignature: {
+    signedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Parent'
+    },
+    signedAt: {
+      type: Date
+    },
+    signature: {
+      type: String // Base64 encoded signature image or text
+    }
+  },
   isdelete: {
     type: Boolean,
     default: false

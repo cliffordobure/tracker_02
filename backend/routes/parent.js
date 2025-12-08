@@ -10,6 +10,9 @@ const Diary = require('../models/Diary');
 const Noticeboard = require('../models/Noticeboard');
 const Message = require('../models/Message');
 const DriverRating = require('../models/DriverRating');
+const Staff = require('../models/Staff');
+const { sendPushNotification, sendToDevice } = require('../services/firebaseService');
+const { getSocketIO } = require('../services/socketService');
 
 router.use(authenticate);
 
@@ -568,7 +571,8 @@ router.get('/diary/:entryId', async (req, res) => {
 
     const entry = await Diary.findById(entryId)
       .populate('studentId', 'name photo grade')
-      .populate('teacherId', 'name email photo');
+      .populate('teacherId', 'name email photo')
+      .populate('parentSignature.signedBy', 'name email');
 
     if (!entry) {
       return res.status(404).json({ message: 'Diary entry not found' });
@@ -606,12 +610,108 @@ router.get('/diary/:entryId', async (req, res) => {
           }
           return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
         }),
+        parentSignature: entry.parentSignature ? {
+          signedBy: entry.parentSignature.signedBy ? {
+            id: entry.parentSignature.signedBy._id,
+            name: entry.parentSignature.signedBy.name
+          } : null,
+          signedAt: entry.parentSignature.signedAt,
+          signature: entry.parentSignature.signature
+        } : null,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt
       }
     });
   } catch (error) {
     console.error('Error fetching diary entry:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Sign diary entry
+router.post('/diary/:entryId/sign', async (req, res) => {
+  try {
+    const { entryId } = req.params;
+    const { signature } = req.body; // Base64 encoded signature image or text
+    const parent = await Parent.findById(req.user._id);
+
+    if (!signature || signature.trim() === '') {
+      return res.status(400).json({ message: 'Signature is required' });
+    }
+
+    const entry = await Diary.findById(entryId)
+      .populate('studentId', 'name photo grade')
+      .populate('teacherId', 'name email deviceToken');
+
+    if (!entry) {
+      return res.status(404).json({ message: 'Diary entry not found' });
+    }
+
+    // Verify student belongs to parent
+    if (!parent.students.includes(entry.studentId._id)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Update diary entry with parent signature
+    entry.parentSignature = {
+      signedBy: parent._id,
+      signedAt: new Date(),
+      signature: signature
+    };
+    await entry.save();
+
+    // Notify teacher via Socket.io and FCM
+    const io = getSocketIO();
+    const notificationMessage = `✅ ${parent.name} has signed the diary entry for ${entry.studentId.name}`;
+
+    // Send Socket.io notification
+    if (entry.teacherId) {
+      io.to(`teacher:${entry.teacherId._id}`).emit('notification', {
+        type: 'diary_signed',
+        diaryId: entry._id,
+        studentId: entry.studentId._id,
+        studentName: entry.studentId.name,
+        parentName: parent.name,
+        message: notificationMessage,
+        timestamp: new Date().toISOString()
+      });
+
+      // Send FCM notification to teacher
+      if (entry.teacherId.deviceToken && entry.teacherId.deviceToken.trim() !== '') {
+        try {
+          await sendToDevice(
+            entry.teacherId.deviceToken,
+            notificationMessage,
+            {
+              type: 'diary_signed',
+              diaryId: entry._id.toString(),
+              studentId: entry.studentId._id.toString(),
+              studentName: entry.studentId.name,
+              parentName: parent.name
+            },
+            '✅ Diary Signed'
+          );
+        } catch (fcmError) {
+          console.error('Error sending FCM notification to teacher:', fcmError);
+        }
+      }
+    }
+
+    res.json({
+      message: 'Diary entry signed successfully',
+      data: {
+        id: entry._id,
+        parentSignature: {
+          signedBy: {
+            id: parent._id,
+            name: parent.name
+          },
+          signedAt: entry.parentSignature.signedAt
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error signing diary entry:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -1071,6 +1171,199 @@ router.put('/messages/read-all', async (req, res) => {
   }
 });
 
+// Send message to driver
+router.post('/messages/driver', async (req, res) => {
+  try {
+    const { driverId, studentId, subject, message, attachments } = req.body;
+    const parent = await Parent.findById(req.user._id);
+
+    if (!driverId || !message) {
+      return res.status(400).json({ message: 'Driver ID and message are required' });
+    }
+
+    // Verify driver exists
+    const driver = await Driver.findById(driverId);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Verify student belongs to parent if provided
+    if (studentId) {
+      if (!parent.students.includes(studentId)) {
+        return res.status(403).json({ message: 'Access denied. Student does not belong to you.' });
+      }
+    }
+
+    // Create message
+    const newMessage = new Message({
+      from: 'parent',
+      fromId: parent._id,
+      fromName: parent.name,
+      to: 'driver',
+      toId: driver._id,
+      studentId: studentId || null,
+      subject: subject || `Message from ${parent.name}`,
+      message,
+      type: 'direct',
+      attachments: attachments || []
+    });
+
+    await newMessage.save();
+
+    // Notify driver via Socket.io and FCM
+    const io = getSocketIO();
+    const notificationMessage = `💬 New message from ${parent.name}${studentId ? ` about ${(await Student.findById(studentId)).name}` : ''}`;
+
+    // Send Socket.io notification
+    io.to(`driver:${driver._id}`).emit('notification', {
+      type: 'message',
+      messageId: newMessage._id,
+      from: parent.name,
+      fromType: 'parent',
+      subject: newMessage.subject,
+      studentId: studentId || null,
+      timestamp: new Date().toISOString()
+    });
+
+    // Send FCM notification to driver
+    if (driver.deviceToken && driver.deviceToken.trim() !== '') {
+      try {
+        await sendToDevice(
+          driver.deviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: newMessage._id.toString(),
+            fromId: parent._id.toString(),
+            fromName: parent.name,
+            fromType: 'parent',
+            subject: newMessage.subject,
+            studentId: studentId || null
+          },
+          '💬 New Message'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to driver:', fcmError);
+      }
+    }
+
+    res.status(201).json({
+      message: 'Message sent to driver successfully',
+      data: {
+        id: newMessage._id,
+        to: {
+          id: driver._id,
+          name: driver.name,
+          type: 'driver'
+        },
+        subject: newMessage.subject,
+        message: newMessage.message,
+        createdAt: newMessage.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error sending message to driver:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Send message to teacher
+router.post('/messages/teacher', async (req, res) => {
+  try {
+    const { teacherId, studentId, subject, message, attachments } = req.body;
+    const parent = await Parent.findById(req.user._id);
+
+    if (!teacherId || !message) {
+      return res.status(400).json({ message: 'Teacher ID and message are required' });
+    }
+
+    // Verify teacher exists
+    const teacher = await Staff.findById(teacherId);
+    if (!teacher || teacher.role !== 'teacher') {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+
+    // Verify student belongs to parent if provided
+    if (studentId) {
+      if (!parent.students.includes(studentId)) {
+        return res.status(403).json({ message: 'Access denied. Student does not belong to you.' });
+      }
+    }
+
+    // Create message
+    const newMessage = new Message({
+      from: 'parent',
+      fromId: parent._id,
+      fromName: parent.name,
+      to: 'teacher',
+      toId: teacher._id,
+      studentId: studentId || null,
+      subject: subject || `Message from ${parent.name}`,
+      message,
+      type: 'direct',
+      attachments: attachments || []
+    });
+
+    await newMessage.save();
+
+    // Notify teacher via Socket.io and FCM
+    const io = getSocketIO();
+    const student = studentId ? await Student.findById(studentId) : null;
+    const notificationMessage = `💬 New message from ${parent.name}${student ? ` about ${student.name}` : ''}`;
+
+    // Send Socket.io notification
+    io.to(`teacher:${teacher._id}`).emit('notification', {
+      type: 'message',
+      messageId: newMessage._id,
+      from: parent.name,
+      fromType: 'parent',
+      subject: newMessage.subject,
+      studentId: studentId || null,
+      timestamp: new Date().toISOString()
+    });
+
+    // Send FCM notification to teacher
+    if (teacher.deviceToken && teacher.deviceToken.trim() !== '') {
+      try {
+        await sendToDevice(
+          teacher.deviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: newMessage._id.toString(),
+            fromId: parent._id.toString(),
+            fromName: parent.name,
+            fromType: 'parent',
+            subject: newMessage.subject,
+            studentId: studentId || null
+          },
+          '💬 New Message'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to teacher:', fcmError);
+      }
+    }
+
+    res.status(201).json({
+      message: 'Message sent to teacher successfully',
+      data: {
+        id: newMessage._id,
+        to: {
+          id: teacher._id,
+          name: teacher.name,
+          type: 'teacher'
+        },
+        subject: newMessage.subject,
+        message: newMessage.message,
+        createdAt: newMessage.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error sending message to teacher:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Reply to a message
 router.post('/messages/:messageId/reply', async (req, res) => {
   try {
@@ -1115,6 +1408,65 @@ router.post('/messages/:messageId/reply', async (req, res) => {
     });
 
     await reply.save();
+
+    // Notify recipient via Socket.io and FCM
+    const io = getSocketIO();
+    let recipient = null;
+    let recipientDeviceToken = null;
+
+    if (originalMessage.to === 'driver') {
+      recipient = await Driver.findById(originalMessage.toId);
+      recipientDeviceToken = recipient?.deviceToken;
+    } else if (originalMessage.to === 'teacher') {
+      recipient = await Staff.findById(originalMessage.toId);
+      recipientDeviceToken = recipient?.deviceToken;
+    }
+
+    if (recipient) {
+      const notificationMessage = `💬 Reply from ${parent.name}`;
+
+      // Send Socket.io notification
+      if (originalMessage.to === 'driver') {
+        io.to(`driver:${recipient._id}`).emit('notification', {
+          type: 'message',
+          messageId: reply._id,
+          from: parent.name,
+          fromType: 'parent',
+          subject: reply.subject,
+          timestamp: new Date().toISOString()
+        });
+      } else if (originalMessage.to === 'teacher') {
+        io.to(`teacher:${recipient._id}`).emit('notification', {
+          type: 'message',
+          messageId: reply._id,
+          from: parent.name,
+          fromType: 'parent',
+          subject: reply.subject,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Send FCM notification
+      if (recipientDeviceToken && recipientDeviceToken.trim() !== '') {
+        try {
+          await sendToDevice(
+            recipientDeviceToken,
+            notificationMessage,
+            {
+              type: 'message',
+              messageId: reply._id.toString(),
+              fromId: parent._id.toString(),
+              fromName: parent.name,
+              fromType: 'parent',
+              subject: reply.subject
+            },
+            '💬 New Reply'
+          );
+        } catch (fcmError) {
+          console.error('Error sending FCM notification for reply:', fcmError);
+        }
+      }
+    }
 
     res.status(201).json({
       message: 'Reply sent successfully',

@@ -72,6 +72,14 @@ const ManagerLayout = ({ children }) => {
               </li>
               <li>
                 <button
+                  onClick={() => navigate('/manager/teachers')}
+                  className="w-full text-left px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-700"
+                >
+                  Teachers
+                </button>
+              </li>
+              <li>
+                <button
                   onClick={() => navigate('/manager/parents')}
                   className="w-full text-left px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-700"
                 >

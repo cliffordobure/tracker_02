@@ -9,6 +9,7 @@ const Message = require('../models/Message');
 const Parent = require('../models/Parent');
 const Notification = require('../models/Notification');
 const { getSocketIO } = require('../services/socketService');
+const { sendToDevice } = require('../services/firebaseService');
 
 router.use(authenticate);
 
@@ -950,6 +951,31 @@ router.post('/messages', verifyTeacher, async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
+    // Send FCM notification to parent
+    if (parent.deviceToken && parent.deviceToken.trim() !== '') {
+      try {
+        const student = studentId ? await Student.findById(studentId) : null;
+        const notificationMessage = `💬 New message from ${teacher.name}${student ? ` about ${student.name}` : ''}`;
+        
+        await sendToDevice(
+          parent.deviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: newMessage._id.toString(),
+            fromId: teacher._id.toString(),
+            fromName: teacher.name,
+            fromType: 'teacher',
+            subject: newMessage.subject,
+            studentId: studentId || null
+          },
+          '💬 New Message'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to parent:', fcmError);
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',
@@ -1027,6 +1053,8 @@ router.post('/messages/:messageId/reply', verifyTeacher, async (req, res) => {
 
     // Notify parent
     const io = getSocketIO();
+    const parent = await Parent.findById(originalMessage.fromId._id);
+    
     io.to(`parent:${originalMessage.fromId._id}`).emit('notification', {
       type: 'message',
       messageId: reply._id,
@@ -1034,6 +1062,29 @@ router.post('/messages/:messageId/reply', verifyTeacher, async (req, res) => {
       subject: reply.subject,
       timestamp: new Date().toISOString()
     });
+
+    // Send FCM notification to parent
+    if (parent && parent.deviceToken && parent.deviceToken.trim() !== '') {
+      try {
+        const notificationMessage = `💬 Reply from ${teacher.name}`;
+        
+        await sendToDevice(
+          parent.deviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: reply._id.toString(),
+            fromId: teacher._id.toString(),
+            fromName: teacher.name,
+            fromType: 'teacher',
+            subject: reply.subject
+          },
+          '💬 New Reply'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to parent:', fcmError);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -1057,4 +1108,6 @@ router.post('/messages/:messageId/reply', verifyTeacher, async (req, res) => {
 });
 
 module.exports = router;
+
+
 

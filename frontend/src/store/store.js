@@ -8,6 +8,7 @@ import managersReducer from './slices/managersSlice'
 import managerStudentsReducer from './slices/managerStudentsSlice'
 import managerParentsReducer from './slices/managerParentsSlice'
 import managerDriversReducer from './slices/managerDriversSlice'
+import managerTeachersReducer from './slices/managerTeachersSlice'
 import routesReducer from './slices/routesSlice'
 
 export const store = configureStore({
@@ -21,6 +22,7 @@ export const store = configureStore({
     managerStudents: managerStudentsReducer,
     managerParents: managerParentsReducer,
     managerDrivers: managerDriversReducer,
+    managerTeachers: managerTeachersReducer,
     routes: routesReducer,
   },
 })

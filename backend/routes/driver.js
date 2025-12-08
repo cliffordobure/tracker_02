@@ -7,6 +7,7 @@ const Student = require('../models/Student');
 const Parent = require('../models/Parent');
 const Notification = require('../models/Notification');
 const { getSocketIO } = require('../services/socketService');
+const { sendPushNotification } = require('../services/firebaseService');
 
 router.use(authenticate);
 
@@ -284,8 +285,38 @@ router.post('/journey/start', async (req, res) => {
     driver.journeyType = journeyType;
     await driver.save();
 
-    // TODO: Send push notifications via FCM
-    // You can implement Firebase Cloud Messaging here
+    // Send FCM push notifications to all parents
+    const parentDeviceTokens = [];
+    route.students.forEach(student => {
+      if (student.parents && student.parents.length > 0) {
+        student.parents.forEach(parent => {
+          if (parent.deviceToken && parent.deviceToken.trim() !== '') {
+            parentDeviceTokens.push(parent.deviceToken);
+          }
+        });
+      }
+    });
+
+    if (parentDeviceTokens.length > 0) {
+      try {
+        await sendPushNotification(
+          parentDeviceTokens,
+          message,
+          {
+            type: 'journey_started',
+            routeId: route._id.toString(),
+            routeName: route.name,
+            journeyType: journeyType,
+            driverId: driver._id.toString(),
+            driverName: driver.name
+          },
+          '🚌 Journey Started'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification for journey start:', fcmError);
+        // Don't fail the request if FCM fails
+      }
+    }
 
     res.json({
       success: true,
@@ -347,6 +378,8 @@ router.post('/student/pickup', async (req, res) => {
     const message = `✅ ${student.name} has been picked up by the bus`;
 
     if (student.parents && student.parents.length > 0) {
+      const parentDeviceTokens = [];
+      
       for (const parent of student.parents) {
         await Notification.create({
           pid: parent._id,
@@ -364,6 +397,32 @@ router.post('/student/pickup', async (req, res) => {
           message,
           timestamp: new Date().toISOString()
         });
+
+        // Collect device tokens for FCM
+        if (parent.deviceToken && parent.deviceToken.trim() !== '') {
+          parentDeviceTokens.push(parent.deviceToken);
+        }
+      }
+
+      // Send FCM push notifications
+      if (parentDeviceTokens.length > 0) {
+        try {
+          await sendPushNotification(
+            parentDeviceTokens,
+            message,
+            {
+              type: 'student_picked_up',
+              studentId: student._id.toString(),
+              studentName: student.name,
+              routeId: route._id.toString(),
+              routeName: route.name
+            },
+            '✅ Student Boarded'
+          );
+        } catch (fcmError) {
+          console.error('Error sending FCM notification for student pickup:', fcmError);
+          // Don't fail the request if FCM fails
+        }
       }
     }
 
@@ -430,6 +489,8 @@ router.post('/student/drop', async (req, res) => {
     const message = `🏠 ${student.name} has been dropped off by the bus`;
 
     if (student.parents && student.parents.length > 0) {
+      const parentDeviceTokens = [];
+      
       for (const parent of student.parents) {
         await Notification.create({
           pid: parent._id,
@@ -447,6 +508,32 @@ router.post('/student/drop', async (req, res) => {
           message,
           timestamp: new Date().toISOString()
         });
+
+        // Collect device tokens for FCM
+        if (parent.deviceToken && parent.deviceToken.trim() !== '') {
+          parentDeviceTokens.push(parent.deviceToken);
+        }
+      }
+
+      // Send FCM push notifications
+      if (parentDeviceTokens.length > 0) {
+        try {
+          await sendPushNotification(
+            parentDeviceTokens,
+            message,
+            {
+              type: 'student_dropped',
+              studentId: student._id.toString(),
+              studentName: student.name,
+              routeId: route._id.toString(),
+              routeName: route.name
+            },
+            '🏠 Student Dropped'
+          );
+        } catch (fcmError) {
+          console.error('Error sending FCM notification for student drop:', fcmError);
+          // Don't fail the request if FCM fails
+        }
       }
     }
 
