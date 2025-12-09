@@ -341,7 +341,8 @@ const sendPushNotificationREST = async (deviceTokens, message, data = {}, title 
             res.on('end', () => {
               try {
                 const parsed = JSON.parse(data);
-                resolve({ success: res.statusCode === 200, statusCode: res.statusCode, data: parsed });
+                const isSuccess = res.statusCode === 200 && !parsed.error;
+                resolve({ success: isSuccess, statusCode: res.statusCode, data: parsed });
               } catch (e) {
                 resolve({ success: false, statusCode: res.statusCode, data: data });
               }
@@ -356,10 +357,37 @@ const sendPushNotificationREST = async (deviceTokens, message, data = {}, title 
           req.end();
         });
         
-        if (result.success) {
+        if (result.success && result.statusCode === 200) {
           results.push({ success: true, token, result: result.data });
+          console.log(`✅ FCM REST API: Notification sent successfully to token ${token.substring(0, 20)}...`);
+          console.log(`   Response: ${JSON.stringify(result.data).substring(0, 100)}...`);
         } else {
           results.push({ success: false, token, error: result.data });
+          console.error(`❌ FCM REST API: Failed to send to token ${token.substring(0, 20)}...`);
+          console.error(`   Status Code: ${result.statusCode}`);
+          console.error(`   Response:`, JSON.stringify(result.data, null, 2));
+          
+          // Check for specific error types
+          if (result.data && result.data.error) {
+            const error = result.data.error;
+            console.error(`   Error Code: ${error.code || error.status}`);
+            console.error(`   Error Message: ${error.message}`);
+            
+            if (error.code === 'INVALID_ARGUMENT' || error.message?.includes('Invalid registration token') || error.message?.includes('Invalid')) {
+              console.error(`   ⚠️  TOKEN IS INVALID OR EXPIRED`);
+              console.error(`   💡 User needs to log in again from mobile app to get a new valid token.`);
+            } else if (error.code === 'UNREGISTERED' || error.message?.includes('unregistered')) {
+              console.error(`   ⚠️  TOKEN IS UNREGISTERED`);
+              console.error(`   💡 App was uninstalled or token expired. User needs to log in again.`);
+            } else if (error.code === 'NOT_FOUND') {
+              console.error(`   ⚠️  TOKEN NOT FOUND`);
+              console.error(`   💡 Token doesn't exist. User needs to log in again.`);
+            } else {
+              console.error(`   💡 Check error details above for more information.`);
+            }
+          } else if (result.statusCode !== 200) {
+            console.error(`   ⚠️  HTTP ${result.statusCode} - Request failed`);
+          }
         }
       } catch (error) {
         results.push({ success: false, token, error: error.message });

@@ -71,5 +71,47 @@ router.get('/test', async (req, res) => {
   }
 });
 
+// Test sending a notification to a specific token
+router.post('/test-send', async (req, res) => {
+  try {
+    const { deviceToken } = req.body;
+    
+    if (!deviceToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'deviceToken is required'
+      });
+    }
+
+    const { sendPushNotificationREST } = require('../services/firebaseService');
+    
+    const result = await sendPushNotificationREST(
+      [deviceToken],
+      'Test notification from backend',
+      { type: 'test', timestamp: new Date().toISOString() },
+      '🧪 Test Notification'
+    );
+
+    res.json({
+      success: result.success,
+      message: result.success 
+        ? 'Notification sent successfully. Check your device.' 
+        : 'Failed to send notification. Check error details.',
+      result: result,
+      tokenInfo: {
+        tokenLength: deviceToken.length,
+        tokenPreview: deviceToken.substring(0, 20) + '...',
+        isValidFormat: deviceToken.length > 50 && !deviceToken.toLowerCase().includes('device_token')
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 module.exports = router;
 

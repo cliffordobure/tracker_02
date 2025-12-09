@@ -605,22 +605,121 @@ router.post('/journey/end', async (req, res) => {
     // Get Socket.io instance
     const io = getSocketIO();
 
-    // Emit journey end to route room
-    io.to(`route:${route._id}`).emit('journey-ended', {
+    // Determine journey type for notification message
+    const journeyType = driver.journeyType || (new Date().getHours() < 12 ? 'pickup' : 'drop-off');
+    
+    // Create notification message based on journey type
+    const notificationMessage = journeyType === 'pickup'
+      ? `🏁 The bus has completed the morning pickup journey. Route: ${route.name}`
+      : `🏁 The bus has completed the afternoon drop-off journey. Route: ${route.name}`;
+
+    // Get all parents on the route for notifications
+    const routeWithStudents = await Route.findById(route._id)
+      .populate({
+        path: 'students',
+        populate: {
+          path: 'parents',
+          select: 'name email phone deviceToken'
+        }
+      });
+
+    // Collect all unique parent IDs and device tokens
+    const parentIds = new Set();
+    const parentDeviceTokens = [];
+    
+    routeWithStudents.students.forEach(student => {
+      if (student.parents && student.parents.length > 0) {
+        student.parents.forEach(parent => {
+          parentIds.add(parent._id);
+          
+          // Collect device tokens (filter out placeholders)
+          if (parent.deviceToken && 
+              parent.deviceToken.trim() !== '' && 
+              parent.deviceToken.length > 50 &&
+              parent.deviceToken.toLowerCase() !== 'device_token') {
+            parentDeviceTokens.push(parent.deviceToken);
+          }
+        });
+      }
+    });
+
+    // Remove duplicate tokens
+    const uniqueTokens = [...new Set(parentDeviceTokens)];
+
+    // Create database notifications for all parents
+    const notifications = [];
+    for (const parentId of parentIds) {
+      const notification = await Notification.create({
+        pid: parentId,
+        sid: route.sid,
+        message: notificationMessage,
+        type: 'journey_ended',
+        routeId: route._id
+      });
+      notifications.push(notification);
+    }
+
+    // Send real-time notifications via Socket.io
+    const notificationData = {
+      type: 'journey_ended',
       routeId: route._id,
       routeName: route.name,
       driverId: driver._id,
       driverName: driver.name,
+      journeyType: journeyType,
+      message: notificationMessage,
       timestamp: new Date().toISOString()
+    };
+
+    // Emit to all parents on the route
+    parentIds.forEach(parentId => {
+      io.to(`parent:${parentId}`).emit('notification', notificationData);
     });
+
+    // Emit journey end to route room
+    io.to(`route:${route._id}`).emit('journey-ended', notificationData);
+
+    // Send FCM push notifications to all parents
+    if (uniqueTokens.length > 0) {
+      try {
+        const fcmResult = await sendPushNotification(
+          uniqueTokens,
+          notificationMessage,
+          {
+            type: 'journey_ended',
+            routeId: route._id.toString(),
+            routeName: route.name,
+            journeyType: journeyType,
+            driverId: driver._id.toString(),
+            driverName: driver.name
+          },
+          '🏁 Journey Completed'
+        );
+        
+        if (!fcmResult.success && fcmResult.error === 'FCM_API_NOT_ENABLED') {
+          console.warn('⚠️  FCM API not enabled. Notifications saved to database but push notifications disabled.');
+        } else if (fcmResult.success) {
+          console.log(`✅ FCM: Journey end notifications sent - ${fcmResult.successCount} successful, ${fcmResult.failureCount} failed`);
+        }
+      } catch (fcmError) {
+        console.error('Error sending FCM notification for journey end:', fcmError.message || fcmError);
+        // Don't fail the request if FCM fails
+      }
+    } else {
+      console.log(`ℹ️  No device tokens found for parents on route ${route.name}. Notifications saved to database.`);
+    }
 
     res.json({
       success: true,
       message: 'Journey ended successfully',
+      journeyType: journeyType,
       route: {
         id: route._id,
         name: route.name
       },
+      studentsCount: routeWithStudents.students.length,
+      notificationsSent: notifications.length,
+      fcmNotificationsSent: uniqueTokens.length,
       journeyStatus: 'completed'
     });
   } catch (error) {
