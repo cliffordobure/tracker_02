@@ -117,8 +117,22 @@ router.post('/parent/login', async (req, res) => {
 
     // Update device token if provided
     if (req.body.deviceToken) {
-      parent.deviceToken = req.body.deviceToken;
-      await parent.save();
+      const token = req.body.deviceToken.trim();
+      
+      // Validate token format (reject placeholder/test tokens)
+      if (token.length < 50 || 
+          token.toLowerCase() === 'device_token' || 
+          token.toLowerCase() === 'test_token' ||
+          token.toLowerCase().includes('placeholder') ||
+          token === 'device_token') {
+        console.warn(`⚠️  Invalid device token format for parent ${parent.email}. Token appears to be a placeholder.`);
+        console.warn(`   Received: "${token}"`);
+        console.warn(`   Real FCM tokens are 140+ character alphanumeric strings.`);
+      } else {
+        parent.deviceToken = token;
+        await parent.save();
+        console.log(`✅ Device token updated for parent ${parent.email} (${token.substring(0, 20)}...)`);
+      }
     }
 
     res.json({
@@ -160,8 +174,22 @@ router.post('/driver/login', async (req, res) => {
 
     // Update device token if provided
     if (req.body.deviceToken) {
-      driver.deviceToken = req.body.deviceToken;
-      await driver.save();
+      const token = req.body.deviceToken.trim();
+      
+      // Validate token format (reject placeholder/test tokens)
+      if (token.length < 50 || 
+          token.toLowerCase() === 'device_token' || 
+          token.toLowerCase() === 'test_token' ||
+          token.toLowerCase().includes('placeholder') ||
+          token === 'device_token') {
+        console.warn(`⚠️  Invalid device token format for driver ${driver.email}. Token appears to be a placeholder.`);
+        console.warn(`   Received: "${token}"`);
+        console.warn(`   Real FCM tokens are 140+ character alphanumeric strings.`);
+      } else {
+        driver.deviceToken = token;
+        await driver.save();
+        console.log(`✅ Device token updated for driver ${driver.email} (${token.substring(0, 20)}...)`);
+      }
     }
 
     res.json({
@@ -209,8 +237,22 @@ router.post('/teacher/login', async (req, res) => {
 
     // Update device token if provided
     if (req.body.deviceToken) {
-      teacher.deviceToken = req.body.deviceToken;
-      await teacher.save();
+      const token = req.body.deviceToken.trim();
+      
+      // Validate token format (reject placeholder/test tokens)
+      if (token.length < 50 || 
+          token.toLowerCase() === 'device_token' || 
+          token.toLowerCase() === 'test_token' ||
+          token.toLowerCase().includes('placeholder') ||
+          token === 'device_token') {
+        console.warn(`⚠️  Invalid device token format for teacher ${teacher.email}. Token appears to be a placeholder.`);
+        console.warn(`   Received: "${token}"`);
+        console.warn(`   Real FCM tokens are 140+ character alphanumeric strings.`);
+      } else {
+        teacher.deviceToken = token;
+        await teacher.save();
+        console.log(`✅ Device token updated for teacher ${teacher.email} (${token.substring(0, 20)}...)`);
+      }
     }
 
     res.json({
