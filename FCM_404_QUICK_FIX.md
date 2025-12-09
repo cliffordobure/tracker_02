@@ -33,7 +33,6 @@ The most common causes when API is enabled and permissions are correct:
 ---
 
 ## 🔍 Most Likely Issue #2: API Propagation Delay
-
 **After enabling the API, it can take 10-15 minutes to fully activate.**
 
 **Check if it's ready:**

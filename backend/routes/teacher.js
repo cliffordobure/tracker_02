@@ -314,6 +314,13 @@ router.get('/diary', verifyTeacher, async (req, res) => {
         }
         return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
       }),
+      // Only show teacherNote if teacherNoteVisible is true
+      teacherNote: entry.teacherNoteVisible ? entry.teacherNote : null,
+      teacherNoteVisible: entry.teacherNoteVisible,
+      parentSignature: entry.parentSignature ? {
+        signedBy: entry.parentSignature.signedBy,
+        signedAt: entry.parentSignature.signedAt
+      } : null,
       createdAt: entry.createdAt
     }));
 
@@ -341,7 +348,7 @@ router.get('/diary', verifyTeacher, async (req, res) => {
 // Create diary entry
 router.post('/diary', verifyTeacher, async (req, res) => {
   try {
-    const { studentId, content, date, attachments } = req.body;
+    const { studentId, content, date, attachments, teacherNote } = req.body;
     const teacher = await Staff.findById(req.user._id);
 
     if (!studentId || !content) {
@@ -349,6 +356,15 @@ router.post('/diary', verifyTeacher, async (req, res) => {
         success: false,
         message: 'Student ID and content are required',
         error: 'MISSING_FIELDS'
+      });
+    }
+
+    // Validate teacherNote length if provided
+    if (teacherNote && teacherNote.length > 500) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Teacher note must be less than 500 characters',
+        error: 'VALIDATION_ERROR'
       });
     }
 
@@ -380,7 +396,9 @@ router.post('/diary', verifyTeacher, async (req, res) => {
       teacherName: teacher.name,
       content,
       date: date ? new Date(date) : new Date(),
-      attachments: attachments || []
+      attachments: attachments || [],
+      teacherNote: teacherNote || null,
+      teacherNoteVisible: false // Always false initially
     });
 
     await diaryEntry.save();
@@ -419,6 +437,8 @@ router.post('/diary', verifyTeacher, async (req, res) => {
         content: diaryEntry.content,
         date: diaryEntry.date,
         attachments: diaryEntry.attachments,
+        teacherNote: diaryEntry.teacherNote,
+        teacherNoteVisible: diaryEntry.teacherNoteVisible,
         createdAt: diaryEntry.createdAt
       }
     });
@@ -436,7 +456,7 @@ router.post('/diary', verifyTeacher, async (req, res) => {
 router.put('/diary/:entryId', verifyTeacher, async (req, res) => {
   try {
     const { entryId } = req.params;
-    const { content, date, attachments } = req.body;
+    const { content, date, attachments, teacherNote } = req.body;
     const teacher = await Staff.findById(req.user._id);
 
     const entry = await Diary.findById(entryId);
@@ -457,6 +477,18 @@ router.put('/diary/:entryId', verifyTeacher, async (req, res) => {
       });
     }
 
+    // Validate teacherNote length if provided
+    if (teacherNote !== undefined) {
+      if (teacherNote && teacherNote.length > 500) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Teacher note must be less than 500 characters',
+          error: 'VALIDATION_ERROR'
+        });
+      }
+      entry.teacherNote = teacherNote || null;
+    }
+
     if (content) entry.content = content;
     if (date) entry.date = new Date(date);
     if (attachments) entry.attachments = attachments;
@@ -472,6 +504,8 @@ router.put('/diary/:entryId', verifyTeacher, async (req, res) => {
         content: entry.content,
         date: entry.date,
         attachments: entry.attachments,
+        teacherNote: entry.teacherNoteVisible ? entry.teacherNote : null,
+        teacherNoteVisible: entry.teacherNoteVisible,
         updatedAt: entry.updatedAt
       }
     });

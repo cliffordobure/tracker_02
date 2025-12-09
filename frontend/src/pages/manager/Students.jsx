@@ -6,6 +6,25 @@ import MapPicker from '../../components/MapPicker'
 import { fetchStudents, createStudent, updateStudent, deleteStudent } from '../../store/slices/managerStudentsSlice'
 import api from '../../services/api'
 
+// Available grades/classes for selection
+const AVAILABLE_GRADES = [
+  'PP1',
+  'PP2',
+  'PP3',
+  'Grade 1',
+  'Grade 2',
+  'Grade 3',
+  'Grade 4',
+  'Grade 5',
+  'Grade 6',
+  'Grade 7',
+  'Grade 8',
+  'Grade 9',
+  'Grade 10',
+  'Grade 11',
+  'Grade 12'
+]
+
 const Students = () => {
   const dispatch = useDispatch()
   const { students, loading } = useSelector((state) => state.managerStudents)
@@ -324,12 +343,18 @@ const Students = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
-                    <input
-                      type="text"
+                    <select
                       value={formData.grade}
                       onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
                       className="input"
-                    />
+                    >
+                      <option value="">Select Grade</option>
+                      {AVAILABLE_GRADES.map((grade) => (
+                        <option key={grade} value={grade}>
+                          {grade}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>

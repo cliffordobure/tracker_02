@@ -41,6 +41,16 @@ const diarySchema = new mongoose.Schema({
       type: String // Base64 encoded signature image or text
     }
   },
+  teacherNote: {
+    type: String,
+    default: null,
+    trim: true,
+    maxlength: 500 // Limit to 500 characters
+  },
+  teacherNoteVisible: {
+    type: Boolean,
+    default: false // Only true after parent signs
+  },
   isdelete: {
     type: Boolean,
     default: false

@@ -658,11 +658,18 @@ router.post('/diary/:entryId/sign', async (req, res) => {
       signedAt: new Date(),
       signature: signature
     };
+
+    // Make teacher note visible after parent signs
+    if (entry.teacherNote) {
+      entry.teacherNoteVisible = true;
+    }
+
     await entry.save();
 
     // Notify teacher via Socket.io and FCM
     const io = getSocketIO();
     const notificationMessage = `✅ ${parent.name} has signed the diary entry for ${entry.studentId.name}`;
+    const hasTeacherNote = !!entry.teacherNote;
 
     // Send Socket.io notification
     if (entry.teacherId) {
@@ -673,6 +680,7 @@ router.post('/diary/:entryId/sign', async (req, res) => {
         studentName: entry.studentId.name,
         parentName: parent.name,
         message: notificationMessage,
+        hasTeacherNote: hasTeacherNote,
         timestamp: new Date().toISOString()
       });
 
@@ -687,7 +695,8 @@ router.post('/diary/:entryId/sign', async (req, res) => {
               diaryId: entry._id.toString(),
               studentId: entry.studentId._id.toString(),
               studentName: entry.studentId.name,
-              parentName: parent.name
+              parentName: parent.name,
+              hasTeacherNote: hasTeacherNote.toString() // NEW: Indicate if note exists
             },
             '✅ Diary Signed'
           );
@@ -707,7 +716,8 @@ router.post('/diary/:entryId/sign', async (req, res) => {
             name: parent.name
           },
           signedAt: entry.parentSignature.signedAt
-        }
+        },
+        teacherNoteVisible: entry.teacherNoteVisible // NEW FIELD
       }
     });
   } catch (error) {
