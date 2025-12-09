@@ -144,6 +144,7 @@ app.use('/api/students', require('./routes/students'));
 app.use('/api/routes', require('./routes/routes'));
 app.use('/api/stops', require('./routes/stops'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/fcm', require('./routes/fcm-test')); // FCM diagnostic endpoint
 
 // Error handling middleware
 app.use((err, req, res, next) => {

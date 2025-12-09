@@ -49,6 +49,17 @@ if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && pro
       console.log('✅ Firebase Admin SDK initialized successfully from environment variables');
       console.log(`   Project ID: ${serviceAccount.project_id}`);
       console.log(`   Client Email: ${serviceAccount.client_email}`);
+      
+      // Verify messaging is available
+      try {
+        if (admin.messaging) {
+          console.log('✅ Firebase Messaging API is available');
+        } else {
+          console.warn('⚠️  Firebase Messaging API not available - may need to enable Cloud Messaging API');
+        }
+      } catch (error) {
+        console.warn('⚠️  Could not verify Messaging API:', error.message);
+      }
     } else {
       firebaseInitialized = true;
     }
