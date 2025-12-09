@@ -4,12 +4,23 @@ const path = require('path');
 
 // Initialize Firebase Admin SDK
 let firebaseInitialized = false;
+let initializationError = null;
 
 // Try to initialize Firebase from environment variables (preferred for cloud platforms like Render)
 if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
   try {
     // Parse the private key (it may have escaped newlines)
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    
+    // Handle different formats of private key
+    if (privateKey.includes('\\n')) {
+      privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+    
+    // Validate private key format
+    if (!privateKey.includes('BEGIN PRIVATE KEY') || !privateKey.includes('END PRIVATE KEY')) {
+      throw new Error('Invalid private key format. Must include BEGIN/END markers.');
+    }
     
     const serviceAccount = {
       type: "service_account",
@@ -24,17 +35,30 @@ if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && pro
       client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL || ''
     };
 
+    // Validate required fields
+    if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
+      throw new Error('Missing required Firebase credentials');
+    }
+
     if (!admin.apps.length) {
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+        credential: admin.credential.cert(serviceAccount),
+        projectId: serviceAccount.project_id
       });
       firebaseInitialized = true;
       console.log('✅ Firebase Admin SDK initialized successfully from environment variables');
+      console.log(`   Project ID: ${serviceAccount.project_id}`);
+      console.log(`   Client Email: ${serviceAccount.client_email}`);
     } else {
       firebaseInitialized = true;
     }
   } catch (error) {
-    console.error('Error initializing Firebase from environment variables:', error.message);
+    initializationError = error;
+    console.error('❌ Error initializing Firebase from environment variables:', error.message);
+    console.error('   Please check:');
+    console.error('   1. FIREBASE_PRIVATE_KEY includes full key with BEGIN/END markers');
+    console.error('   2. FIREBASE_CLIENT_EMAIL is correct');
+    console.error('   3. FIREBASE_PROJECT_ID matches your Firebase project');
   }
 }
 
@@ -67,8 +91,23 @@ if (!firebaseInitialized) {
 
 const sendPushNotification = async (deviceTokens, message, data = {}, title = 'School Bus Tracker') => {
   if (!firebaseInitialized) {
-    console.log('FCM not configured - would send notification:', { deviceTokens, message, data });
+    if (initializationError) {
+      console.error('FCM not configured due to initialization error:', initializationError.message);
+    } else {
+      console.log('FCM not configured - would send notification:', { deviceTokens, message, data });
+    }
     return { success: false, message: 'Firebase not configured' };
+  }
+
+  // Verify Firebase is actually working
+  try {
+    // Quick validation - check if messaging is available
+    if (!admin.messaging) {
+      throw new Error('Firebase Messaging API not available');
+    }
+  } catch (error) {
+    console.error('Firebase Messaging API error:', error.message);
+    return { success: false, message: 'Firebase Messaging API not available. Please enable Cloud Messaging API in Firebase Console.' };
   }
 
   try {
