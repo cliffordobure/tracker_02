@@ -94,14 +94,31 @@ router.get('/students', verifyTeacher, async (req, res) => {
       });
     }
 
+    // Normalize assigned class for case-insensitive comparison
+    const assignedClass = teacher.assignedClass.trim();
+    const normalizedAssignedClass = assignedClass.toLowerCase();
+
+    // Use case-insensitive query to match grade with assignedClass
+    // This handles variations like "pp2", "PP2", "Pp2", etc.
     const students = await Student.find({
       sid: teacher.sid,
-      grade: teacher.assignedClass,
-      isdelete: false
+      isdelete: false,
+      $expr: {
+        $eq: [
+          { $toLower: { $trim: { input: { $ifNull: ["$grade", ""] } } } },
+          normalizedAssignedClass
+        ]
+      }
     })
       .populate('parents', 'name email phone photo')
       .populate('route', 'name')
       .sort({ name: 1 });
+
+    // Log for debugging
+    console.log(`👨‍🏫 Teacher ${teacher.name} (assignedClass: "${assignedClass}") - Found ${students.length} students`);
+    if (students.length > 0) {
+      console.log(`   Students: ${students.map(s => `${s.name} (grade: "${s.grade}")`).join(', ')}`);
+    }
 
     const studentsData = students.map(student => ({
       id: student._id,
@@ -151,8 +168,11 @@ router.post('/students/:studentId/leave-school', verifyTeacher, async (req, res)
       });
     }
 
-    // Verify student is in teacher's class
-    if (student.grade !== teacher.assignedClass) {
+    // Verify student is in teacher's class (case-insensitive comparison)
+    const studentGrade = (student.grade || '').trim().toLowerCase();
+    const teacherClass = (teacher.assignedClass || '').trim().toLowerCase();
+    
+    if (studentGrade !== teacherClass) {
       return res.status(403).json({ 
         success: false,
         message: 'Access denied. Student is not in your assigned class.',
@@ -342,7 +362,11 @@ router.post('/diary', verifyTeacher, async (req, res) => {
       });
     }
 
-    if (student.grade !== teacher.assignedClass || student.sid.toString() !== teacher.sid.toString()) {
+    // Case-insensitive grade comparison
+    const studentGrade = (student.grade || '').trim().toLowerCase();
+    const teacherClass = (teacher.assignedClass || '').trim().toLowerCase();
+    
+    if (studentGrade !== teacherClass || student.sid.toString() !== teacher.sid.toString()) {
       return res.status(403).json({ 
         success: false,
         message: 'Access denied. Student is not in your assigned class.',
@@ -599,10 +623,13 @@ router.post('/notices', verifyTeacher, async (req, res) => {
       });
     }
 
-    // Verify student if provided
+    // Verify student if provided (case-insensitive grade comparison)
     if (studentId) {
       const student = await Student.findById(studentId);
-      if (!student || student.grade !== teacher.assignedClass || student.sid.toString() !== teacher.sid.toString()) {
+      const studentGrade = (student?.grade || '').trim().toLowerCase();
+      const teacherClass = (teacher.assignedClass || '').trim().toLowerCase();
+      
+      if (!student || studentGrade !== teacherClass || student.sid.toString() !== teacher.sid.toString()) {
         return res.status(403).json({ 
           success: false,
           message: 'Access denied',
@@ -906,10 +933,13 @@ router.post('/messages', verifyTeacher, async (req, res) => {
       });
     }
 
-    // Verify student if provided
+    // Verify student if provided (case-insensitive grade comparison)
     if (studentId) {
       const student = await Student.findById(studentId);
-      if (!student || student.grade !== teacher.assignedClass || student.sid.toString() !== teacher.sid.toString()) {
+      const studentGrade = (student?.grade || '').trim().toLowerCase();
+      const teacherClass = (teacher.assignedClass || '').trim().toLowerCase();
+      
+      if (!student || studentGrade !== teacherClass || student.sid.toString() !== teacher.sid.toString()) {
         return res.status(403).json({ 
           success: false,
           message: 'Access denied',
