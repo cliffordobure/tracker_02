@@ -160,8 +160,7 @@ const sendPushNotification = async (deviceTokens, message, data = {}, title = 'S
       projectId: projectId,
       tokenCount: validTokens.length,
       title: title,
-      message: message.substring(0, 50) + '...',
-      usingAPI: 'Firebase Admin SDK v' + require('firebase-admin/package.json').version
+      message: message.substring(0, 50) + '...'
     });
 
     // Get messaging instance
