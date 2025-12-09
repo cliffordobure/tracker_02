@@ -155,8 +155,24 @@ const sendPushNotification = async (deviceTokens, message, data = {}, title = 'S
       responses: response.responses
     };
   } catch (error) {
-    console.error('Error sending push notification:', error);
-    return { success: false, message: error.message, error: error };
+    // Handle specific Firebase errors
+    if (error.code === 'messaging/unknown-error' && error.message.includes('404')) {
+      console.error('❌ Firebase Cloud Messaging API Error (404):');
+      console.error('   The Cloud Messaging API is not enabled or credentials are incorrect.');
+      console.error('   Please:');
+      console.error('   1. Enable Cloud Messaging API in Google Cloud Console');
+      console.error('   2. Verify service account has proper permissions');
+      console.error('   3. Check environment variables are correct');
+      return { 
+        success: false, 
+        message: 'Firebase Cloud Messaging API not enabled. Please enable it in Google Cloud Console.',
+        error: 'FCM_API_NOT_ENABLED',
+        code: error.code
+      };
+    }
+    
+    console.error('Error sending push notification:', error.message || error);
+    return { success: false, message: error.message || 'Unknown error', error: error };
   }
 };
 

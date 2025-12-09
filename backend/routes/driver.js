@@ -299,7 +299,7 @@ router.post('/journey/start', async (req, res) => {
 
     if (parentDeviceTokens.length > 0) {
       try {
-        await sendPushNotification(
+        const fcmResult = await sendPushNotification(
           parentDeviceTokens,
           message,
           {
@@ -312,10 +312,16 @@ router.post('/journey/start', async (req, res) => {
           },
           '🚌 Journey Started'
         );
+        
+        if (!fcmResult.success && fcmResult.error === 'FCM_API_NOT_ENABLED') {
+          console.warn('⚠️  FCM API not enabled. Notifications saved to database but push notifications disabled.');
+        }
       } catch (fcmError) {
-        console.error('Error sending FCM notification for journey start:', fcmError);
+        console.error('Error sending FCM notification for journey start:', fcmError.message || fcmError);
         // Don't fail the request if FCM fails
       }
+    } else {
+      console.log(`ℹ️  No device tokens found for parents on route ${route.name}. Notifications saved to database.`);
     }
 
     res.json({
@@ -407,7 +413,7 @@ router.post('/student/pickup', async (req, res) => {
       // Send FCM push notifications
       if (parentDeviceTokens.length > 0) {
         try {
-          await sendPushNotification(
+          const fcmResult = await sendPushNotification(
             parentDeviceTokens,
             message,
             {
@@ -419,10 +425,16 @@ router.post('/student/pickup', async (req, res) => {
             },
             '✅ Student Boarded'
           );
+          
+          if (!fcmResult.success && fcmResult.error === 'FCM_API_NOT_ENABLED') {
+            console.warn('⚠️  FCM API not enabled. Notifications saved to database but push notifications disabled.');
+          }
         } catch (fcmError) {
-          console.error('Error sending FCM notification for student pickup:', fcmError);
+          console.error('Error sending FCM notification for student pickup:', fcmError.message || fcmError);
           // Don't fail the request if FCM fails
         }
+      } else {
+        console.log(`ℹ️  No device tokens found for ${student.name}'s parents. Notifications saved to database.`);
       }
     }
 
@@ -518,7 +530,7 @@ router.post('/student/drop', async (req, res) => {
       // Send FCM push notifications
       if (parentDeviceTokens.length > 0) {
         try {
-          await sendPushNotification(
+          const fcmResult = await sendPushNotification(
             parentDeviceTokens,
             message,
             {
@@ -530,10 +542,16 @@ router.post('/student/drop', async (req, res) => {
             },
             '🏠 Student Dropped'
           );
+          
+          if (!fcmResult.success && fcmResult.error === 'FCM_API_NOT_ENABLED') {
+            console.warn('⚠️  FCM API not enabled. Notifications saved to database but push notifications disabled.');
+          }
         } catch (fcmError) {
-          console.error('Error sending FCM notification for student drop:', fcmError);
+          console.error('Error sending FCM notification for student drop:', fcmError.message || fcmError);
           // Don't fail the request if FCM fails
         }
+      } else {
+        console.log(`ℹ️  No device tokens found for ${student.name}'s parents. Notifications saved to database.`);
       }
     }
 
