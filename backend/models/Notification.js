@@ -20,7 +20,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['pickup', 'drop', 'alert', 'notice', 'general', 'journey_started', 'student_picked_up', 'student_dropped'],
+    enum: ['pickup', 'drop', 'alert', 'notice', 'general', 'journey_started', 'journey_ended', 'student_picked_up', 'student_dropped'],
     default: 'general'
   },
   routeId: {
