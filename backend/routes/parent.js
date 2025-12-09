@@ -524,28 +524,50 @@ router.get('/diary', async (req, res) => {
     // Build full URLs for attachments
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
 
-    const entriesData = diaryEntries.map(entry => ({
-      id: entry._id,
-      student: {
-        id: entry.studentId._id,
-        name: entry.studentId.name,
-        photo: entry.studentId.photo,
-        grade: entry.studentId.grade
-      },
-      teacher: {
-        id: entry.teacherId._id,
-        name: entry.teacherName || entry.teacherId.name
-      },
-      content: entry.content,
-      date: entry.date,
-      attachments: entry.attachments.map(att => {
-        if (att.startsWith('http://') || att.startsWith('https://')) {
-          return att;
-        }
-        return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
-      }),
-      createdAt: entry.createdAt
-    }));
+    const entriesData = diaryEntries.map(entry => {
+      // Check if entry is actually signed (has valid signedBy and signedAt)
+      // signedBy can be ObjectId or populated object, signedAt must be a valid date
+      const hasSignature = entry.parentSignature && 
+                           entry.parentSignature.signedBy && 
+                           entry.parentSignature.signedAt;
+      const isSigned = hasSignature && 
+                       (entry.parentSignature.signedAt instanceof Date || 
+                        (typeof entry.parentSignature.signedAt === 'string' && entry.parentSignature.signedAt.length > 0));
+
+      return {
+        id: entry._id,
+        student: {
+          id: entry.studentId._id,
+          name: entry.studentId.name,
+          photo: entry.studentId.photo,
+          grade: entry.studentId.grade
+        },
+        teacher: {
+          id: entry.teacherId._id,
+          name: entry.teacherName || entry.teacherId.name
+        },
+        content: entry.content,
+        date: entry.date,
+        attachments: entry.attachments.map(att => {
+          if (att.startsWith('http://') || att.startsWith('https://')) {
+            return att;
+          }
+          return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
+        }),
+        // Only return parentSignature if entry is actually signed
+        parentSignature: isSigned ? {
+          signedBy: {
+            id: entry.parentSignature.signedBy._id ? entry.parentSignature.signedBy._id.toString() : entry.parentSignature.signedBy.toString(),
+            name: entry.parentSignature.signedBy.name || 'Parent'
+          },
+          signedAt: entry.parentSignature.signedAt instanceof Date 
+            ? entry.parentSignature.signedAt.toISOString() 
+            : entry.parentSignature.signedAt,
+          signature: entry.parentSignature.signature
+        } : null,
+        createdAt: entry.createdAt
+      };
+    });
 
     res.json({
       message: 'success',
@@ -586,6 +608,14 @@ router.get('/diary/:entryId', async (req, res) => {
     // Build full URLs for attachments
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
 
+    // Check if entry is actually signed (has valid signedBy and signedAt)
+    // Must have both signedBy (ObjectId) and signedAt (Date) to be considered signed
+    const isSigned = entry.parentSignature && 
+                     entry.parentSignature.signedBy && 
+                     entry.parentSignature.signedAt &&
+                     (entry.parentSignature.signedAt instanceof Date || 
+                      (typeof entry.parentSignature.signedAt === 'string' && entry.parentSignature.signedAt.length > 0));
+
     res.json({
       message: 'success',
       data: {
@@ -610,12 +640,15 @@ router.get('/diary/:entryId', async (req, res) => {
           }
           return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
         }),
-        parentSignature: entry.parentSignature ? {
-          signedBy: entry.parentSignature.signedBy ? {
-            id: entry.parentSignature.signedBy._id,
-            name: entry.parentSignature.signedBy.name
-          } : null,
-          signedAt: entry.parentSignature.signedAt,
+        // Only return parentSignature if entry is actually signed
+        parentSignature: isSigned ? {
+          signedBy: {
+            id: entry.parentSignature.signedBy._id ? entry.parentSignature.signedBy._id.toString() : entry.parentSignature.signedBy.toString(),
+            name: entry.parentSignature.signedBy.name || 'Parent'
+          },
+          signedAt: entry.parentSignature.signedAt instanceof Date 
+            ? entry.parentSignature.signedAt.toISOString() 
+            : entry.parentSignature.signedAt,
           signature: entry.parentSignature.signature
         } : null,
         createdAt: entry.createdAt,
