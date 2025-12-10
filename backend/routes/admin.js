@@ -6,24 +6,38 @@ const Manager = require('../models/Manager');
 const School = require('../models/School');
 const Student = require('../models/Student');
 const Route = require('../models/Route');
+const Driver = require('../models/Driver');
+const Parent = require('../models/Parent');
 
 // Apply authentication to all routes
 router.use(authenticate);
 router.use(authorize('admin'));
 
 // Dashboard Stats
+// Admin only sees aggregate counts, not individual student/parent details
 router.get('/dashboard', async (req, res) => {
   try {
     const schools = await School.countDocuments({ status: 'Active' });
     const managers = await Manager.countDocuments({ status: 'Active' });
     const routes = await Route.countDocuments({ isdeleted: false });
+    // Aggregate counts only - no individual details
     const students = await Student.countDocuments({ isdelete: false });
+    const drivers = await Driver.countDocuments({ status: { $ne: 'Deleted' } });
+    const parents = await Parent.countDocuments({ status: 'Active' });
+    const activeDrivers = await Driver.countDocuments({ 
+      status: { $ne: 'Deleted' },
+      latitude: { $ne: null },
+      longitude: { $ne: null }
+    });
 
     res.json({
       schools,
       managers,
       routes,
-      students
+      students, // Count only
+      drivers, // Count only
+      parents, // Count only
+      activeDrivers
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -212,32 +226,9 @@ router.delete('/managers/:id', async (req, res) => {
   }
 });
 
-// Get all students
-router.get('/students', async (req, res) => {
-  try {
-    const students = await Student.find({ isdelete: false })
-      .populate('sid', 'name')
-      .populate('route', 'name')
-      .populate('parents', 'name email')
-      .sort({ createdAt: -1 });
-    res.json(students);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// Get all parents
-router.get('/parents', async (req, res) => {
-  try {
-    const parents = await require('../models/Parent').find({ status: 'Active' })
-      .select('-password')
-      .populate('students', 'name')
-      .sort({ createdAt: -1 });
-    res.json(parents);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
+// Note: Admin does not have direct access to student/parent details
+// Admin only manages schools and managers
+// Students and parents are managed by individual school managers
 
 module.exports = router;
 

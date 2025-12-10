@@ -7,6 +7,7 @@ const Driver = require('../models/Driver');
 const Route = require('../models/Route');
 const Student = require('../models/Student');
 const Staff = require('../models/Staff');
+const DriverRating = require('../models/DriverRating');
 
 router.use(authenticate);
 router.use(authorize('manager'));
@@ -361,6 +362,617 @@ router.delete('/teachers/:id', async (req, res) => {
     res.json({ message: 'Teacher deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ==================== DRIVER RATINGS MANAGEMENT ====================
+
+// Get all driver ratings with filtering, pagination, and sorting
+router.get('/drivers/ratings', async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      driverId,
+      studentId,
+      parentId,
+      minRating,
+      maxRating,
+      startDate,
+      endDate,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Build query - filter by manager's school
+    const query = {};
+    
+    // Get all drivers in manager's school
+    const schoolDrivers = await Driver.find({ 
+      sid: req.user.sid,
+      status: { $ne: 'Deleted' }
+    }).select('_id');
+    const driverIds = schoolDrivers.map(d => d._id);
+    
+    // Only show ratings for drivers in manager's school
+    query.driverId = { $in: driverIds };
+
+    // Apply filters
+    if (driverId) {
+      // Verify driver belongs to manager's school
+      const driver = await Driver.findOne({ 
+        _id: driverId, 
+        sid: req.user.sid,
+        status: { $ne: 'Deleted' }
+      });
+      if (!driver) {
+        return res.status(404).json({
+          success: false,
+          message: 'Driver not found',
+          error: 'Driver with ID does not exist or does not belong to your school'
+        });
+      }
+      query.driverId = driverId;
+    }
+
+    if (studentId) {
+      // Verify student belongs to manager's school
+      const student = await Student.findOne({ 
+        _id: studentId, 
+        sid: req.user.sid,
+        isdelete: false
+      });
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found',
+          error: 'Student with ID does not exist or does not belong to your school'
+        });
+      }
+      query.studentId = studentId;
+    }
+
+    if (parentId) {
+      query.parentId = parentId;
+    }
+
+    if (minRating || maxRating) {
+      query.rating = {};
+      if (minRating) query.rating.$gte = parseInt(minRating);
+      if (maxRating) query.rating.$lte = parseInt(maxRating);
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    // Build sort
+    const sort = {};
+    const validSortFields = ['rating', 'createdAt', 'driverName'];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    sort[sortField] = sortOrder === 'asc' ? 1 : -1;
+
+    // If sorting by driverName, we'll need to sort after population
+    const shouldSortAfter = sortField === 'driverName';
+
+    // Calculate pagination
+    const pageNum = parseInt(page);
+    const limitNum = Math.min(parseInt(limit), 100); // Max 100 items per page
+    const skip = (pageNum - 1) * limitNum;
+
+    // Count total items
+    const totalItems = await DriverRating.countDocuments(query);
+    const totalPages = Math.ceil(totalItems / limitNum);
+
+    // Fetch ratings with population
+    let ratings = await DriverRating.find(query)
+      .populate('driverId', 'name email phone photo vehicleNumber')
+      .populate('parentId', 'name email')
+      .populate('studentId', 'name grade')
+      .sort(shouldSortAfter ? { createdAt: -1 } : sort)
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    // Sort by driverName if needed
+    if (shouldSortAfter) {
+      ratings.sort((a, b) => {
+        const nameA = a.driverId?.name || '';
+        const nameB = b.driverId?.name || '';
+        return sortOrder === 'asc' 
+          ? nameA.localeCompare(nameB)
+          : nameB.localeCompare(nameA);
+      });
+    }
+
+    // Calculate summary statistics
+    const summaryAggregation = await DriverRating.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalRatings: { $sum: 1 },
+          averageRating: { $avg: '$rating' },
+          ratingDistribution: {
+            $push: '$rating'
+          }
+        }
+      }
+    ]);
+
+    const summaryData = summaryAggregation[0] || {
+      totalRatings: 0,
+      averageRating: 0,
+      ratingDistribution: []
+    };
+
+    // Format rating distribution
+    const distribution = { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 };
+    summaryData.ratingDistribution.forEach(rating => {
+      if (rating >= 1 && rating <= 5) {
+        distribution[rating.toString()]++;
+      }
+    });
+
+    // Format response
+    const formattedRatings = ratings.map(rating => ({
+      id: rating._id.toString(),
+      driver: rating.driverId ? {
+        id: rating.driverId._id.toString(),
+        name: rating.driverId.name,
+        email: rating.driverId.email,
+        phone: rating.driverId.phone,
+        photo: rating.driverId.photo,
+        vehicleNumber: rating.driverId.vehicleNumber
+      } : null,
+      parent: rating.parentId ? {
+        id: rating.parentId._id.toString(),
+        name: rating.parentId.name,
+        email: rating.parentId.email
+      } : null,
+      student: rating.studentId ? {
+        id: rating.studentId._id.toString(),
+        name: rating.studentId.name,
+        grade: rating.studentId.grade
+      } : null,
+      rating: rating.rating,
+      comment: rating.comment || '',
+      createdAt: rating.createdAt,
+      updatedAt: rating.updatedAt
+    }));
+
+    res.json({
+      success: true,
+      message: 'Driver ratings retrieved successfully',
+      data: formattedRatings,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalItems,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1
+      },
+      summary: {
+        totalRatings: summaryData.totalRatings,
+        averageRating: summaryData.averageRating 
+          ? Math.round(summaryData.averageRating * 10) / 10 
+          : 0,
+        ratingDistribution: distribution
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching driver ratings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get driver ratings summary
+router.get('/drivers/ratings/summary', async (req, res) => {
+  try {
+    const { driverId, startDate, endDate } = req.query;
+
+    // Build query - filter by manager's school
+    const query = {};
+    
+    // Get all drivers in manager's school
+    const schoolDrivers = await Driver.find({ 
+      sid: req.user.sid,
+      status: { $ne: 'Deleted' }
+    }).select('_id');
+    const driverIds = schoolDrivers.map(d => d._id);
+    
+    query.driverId = { $in: driverIds };
+
+    if (driverId) {
+      // Verify driver belongs to manager's school
+      const driver = await Driver.findOne({ 
+        _id: driverId, 
+        sid: req.user.sid,
+        status: { $ne: 'Deleted' }
+      });
+      if (!driver) {
+        return res.status(404).json({
+          success: false,
+          message: 'Driver not found',
+          error: 'Driver with ID does not exist or does not belong to your school'
+        });
+      }
+      query.driverId = driverId;
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    // Overall summary
+    const overallSummary = await DriverRating.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalRatings: { $sum: 1 },
+          averageRating: { $avg: '$rating' },
+          ratingDistribution: { $push: '$rating' }
+        }
+      }
+    ]);
+
+    const overall = overallSummary[0] || {
+      totalRatings: 0,
+      averageRating: 0,
+      ratingDistribution: []
+    };
+
+    // Format rating distribution
+    const distribution = { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 };
+    overall.ratingDistribution.forEach(rating => {
+      if (rating >= 1 && rating <= 5) {
+        distribution[rating.toString()]++;
+      }
+    });
+
+    // Per-driver summary
+    const perDriverSummary = await DriverRating.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: '$driverId',
+          totalRatings: { $sum: 1 },
+          averageRating: { $avg: '$rating' },
+          ratingDistribution: { $push: '$rating' },
+          recentRatings: {
+            $push: {
+              id: '$_id',
+              rating: '$rating',
+              comment: '$comment',
+              parentId: '$parentId',
+              studentId: '$studentId',
+              createdAt: '$createdAt'
+            }
+          }
+        }
+      },
+      {
+        $sort: { totalRatings: -1 }
+      }
+    ]);
+
+    // Populate driver and parent/student info for per-driver summary
+    const driversWithSummary = await Promise.all(
+      perDriverSummary.map(async (summary) => {
+        const driver = await Driver.findById(summary._id)
+          .select('name email phone photo vehicleNumber')
+          .lean();
+        
+        if (!driver) return null;
+
+        // Format rating distribution for this driver
+        const driverDistribution = { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 };
+        summary.ratingDistribution.forEach(rating => {
+          if (rating >= 1 && rating <= 5) {
+            driverDistribution[rating.toString()]++;
+          }
+        });
+
+        // Get recent ratings with parent/student info
+        const recentRatings = await Promise.all(
+          summary.recentRatings
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 3)
+            .map(async (rating) => {
+              const parent = await Parent.findById(rating.parentId)
+                .select('name')
+                .lean();
+              const student = await Student.findById(rating.studentId)
+                .select('name')
+                .lean();
+              
+              return {
+                id: rating.id.toString(),
+                rating: rating.rating,
+                comment: rating.comment || '',
+                parentName: parent?.name || 'Unknown',
+                studentName: student?.name || 'Unknown',
+                createdAt: rating.createdAt
+              };
+            })
+        );
+
+        return {
+          driverId: summary._id.toString(),
+          driverName: driver.name,
+          totalRatings: summary.totalRatings,
+          averageRating: Math.round(summary.averageRating * 10) / 10,
+          ratingDistribution: driverDistribution,
+          recentRatings
+        };
+      })
+    );
+
+    const validDrivers = driversWithSummary.filter(d => d !== null);
+
+    res.json({
+      success: true,
+      message: 'Driver ratings summary retrieved successfully',
+      data: {
+        totalRatings: overall.totalRatings,
+        averageRating: overall.averageRating 
+          ? Math.round(overall.averageRating * 10) / 10 
+          : 0,
+        ratingDistribution: distribution,
+        drivers: validDrivers,
+        timeRange: {
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching driver ratings summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Export driver ratings (must come before parameterized route)
+router.get('/drivers/ratings/export', async (req, res) => {
+  try {
+    const { format = 'csv', driverId, startDate, endDate } = req.query;
+
+    // Build query - filter by manager's school
+    const query = {};
+    
+    // Get all drivers in manager's school
+    const schoolDrivers = await Driver.find({ 
+      sid: req.user.sid,
+      status: { $ne: 'Deleted' }
+    }).select('_id');
+    const driverIds = schoolDrivers.map(d => d._id);
+    
+    query.driverId = { $in: driverIds };
+
+    if (driverId) {
+      const driver = await Driver.findOne({ 
+        _id: driverId, 
+        sid: req.user.sid,
+        status: { $ne: 'Deleted' }
+      });
+      if (!driver) {
+        return res.status(404).json({
+          success: false,
+          message: 'Driver not found'
+        });
+      }
+      query.driverId = driverId;
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    // Fetch all ratings (no pagination for export)
+    const ratings = await DriverRating.find(query)
+      .populate('driverId', 'name vehicleNumber')
+      .populate('parentId', 'name')
+      .populate('studentId', 'name')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (format === 'csv') {
+      // Generate CSV
+      const csvHeader = 'Rating ID,Driver Name,Driver ID,Vehicle Number,Parent Name,Student Name,Rating,Comment,Date\n';
+      
+      const csvRows = ratings.map(rating => {
+        const id = rating._id.toString();
+        const driverName = rating.driverId?.name || 'Unknown';
+        const driverId = rating.driverId?._id.toString() || '';
+        const vehicleNumber = rating.driverId?.vehicleNumber || '';
+        const parentName = rating.parentId?.name || 'Unknown';
+        const studentName = rating.studentId?.name || 'Unknown';
+        const ratingValue = rating.rating;
+        const comment = (rating.comment || '').replace(/"/g, '""'); // Escape quotes
+        const date = new Date(rating.createdAt).toISOString().split('T')[0];
+        
+        return `"${id}","${driverName}","${driverId}","${vehicleNumber}","${parentName}","${studentName}",${ratingValue},"${comment}","${date}"`;
+      });
+
+      const csvContent = csvHeader + csvRows.join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="driver-ratings-${Date.now()}.csv"`);
+      res.send(csvContent);
+    } else {
+      // For Excel format, we'll return CSV for now (can be enhanced with exceljs library later)
+      res.status(400).json({
+        success: false,
+        message: 'Excel format not yet supported. Please use CSV format.',
+        error: 'Use format=csv'
+      });
+    }
+  } catch (error) {
+    console.error('Error exporting driver ratings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get ratings for specific driver
+router.get('/drivers/:driverId/ratings', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const {
+      page = 1,
+      limit = 20,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Verify driver belongs to manager's school
+    const driver = await Driver.findOne({ 
+      _id: driverId, 
+      sid: req.user.sid,
+      status: { $ne: 'Deleted' }
+    });
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: 'Driver not found',
+        error: `Driver with ID '${driverId}' does not exist or does not belong to your school`
+      });
+    }
+
+    // Build query
+    const query = { driverId };
+
+    // Build sort
+    const sort = {};
+    const validSortFields = ['rating', 'createdAt'];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    sort[sortField] = sortOrder === 'asc' ? 1 : -1;
+
+    // Calculate pagination
+    const pageNum = parseInt(page);
+    const limitNum = Math.min(parseInt(limit), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Count total items
+    const totalItems = await DriverRating.countDocuments(query);
+    const totalPages = Math.ceil(totalItems / limitNum);
+
+    // Get driver statistics
+    const driverStats = await DriverRating.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalRatings: { $sum: 1 },
+          averageRating: { $avg: '$rating' }
+        }
+      }
+    ]);
+
+    const stats = driverStats[0] || {
+      totalRatings: 0,
+      averageRating: 0
+    };
+
+    // Fetch ratings
+    const ratings = await DriverRating.find(query)
+      .populate('parentId', 'name email')
+      .populate('studentId', 'name grade')
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    // Format response
+    const formattedRatings = ratings.map(rating => ({
+      id: rating._id.toString(),
+      parent: rating.parentId ? {
+        id: rating.parentId._id.toString(),
+        name: rating.parentId.name,
+        email: rating.parentId.email
+      } : null,
+      student: rating.studentId ? {
+        id: rating.studentId._id.toString(),
+        name: rating.studentId.name,
+        grade: rating.studentId.grade
+      } : null,
+      rating: rating.rating,
+      comment: rating.comment || '',
+      createdAt: rating.createdAt
+    }));
+
+    res.json({
+      success: true,
+      message: 'Driver ratings retrieved successfully',
+      data: {
+        driver: {
+          id: driver._id.toString(),
+          name: driver.name,
+          email: driver.email,
+          phone: driver.phone,
+          photo: driver.photo,
+          vehicleNumber: driver.vehicleNumber,
+          totalRatings: stats.totalRatings,
+          averageRating: stats.averageRating 
+            ? Math.round(stats.averageRating * 10) / 10 
+            : 0
+        },
+        ratings: formattedRatings,
+        pagination: {
+          currentPage: pageNum,
+          totalPages,
+          totalItems,
+          itemsPerPage: limitNum,
+          hasNextPage: pageNum < totalPages,
+          hasPreviousPage: pageNum > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching driver ratings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

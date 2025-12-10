@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import axios from 'axios'
 import PrivateRoute from './utils/PrivateRoute'
+import Landing from './pages/Landing'
 import Login from './pages/Login'
 import AdminRouter from './pages/admin/AdminRouter'
 import ManagerRouter from './pages/manager/ManagerRouter'
@@ -21,6 +22,7 @@ function App() {
 
   return (
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route
         path="/admin/*"
@@ -46,7 +48,6 @@ function App() {
           </PrivateRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/login" replace />} />
     </Routes>
   )
 }

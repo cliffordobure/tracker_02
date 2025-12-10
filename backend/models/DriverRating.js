@@ -4,30 +4,37 @@ const driverRatingSchema = new mongoose.Schema({
   driverId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Driver',
-    required: true
+    required: true,
+    index: true
   },
   parentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Parent',
-    required: true
+    required: true,
+    index: true
   },
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Student'
+    ref: 'Student',
+    required: true,
+    index: true
   },
   rating: {
     type: Number,
     required: true,
     min: 1,
-    max: 5
+    max: 5,
+    index: true
   },
   comment: {
     type: String,
+    maxlength: 500,
     trim: true
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   updatedAt: {
     type: Date,
@@ -35,9 +42,12 @@ const driverRatingSchema = new mongoose.Schema({
   }
 });
 
-// Index to prevent duplicate ratings from same parent for same driver
-driverRatingSchema.index({ driverId: 1, parentId: 1 }, { unique: false });
+// Compound indexes for efficient queries
 driverRatingSchema.index({ driverId: 1, createdAt: -1 });
+driverRatingSchema.index({ parentId: 1, createdAt: -1 });
+driverRatingSchema.index({ studentId: 1, createdAt: -1 });
+driverRatingSchema.index({ rating: 1, createdAt: -1 });
+driverRatingSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('DriverRating', driverRatingSchema);
 

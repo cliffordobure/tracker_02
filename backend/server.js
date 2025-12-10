@@ -103,6 +103,47 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Join manager room (for receiving all driver location updates)
+  socket.on('join-manager-room', async () => {
+    socket.join('managers');
+    console.log(`Manager/Admin joined managers room`);
+    
+    // Send all current driver locations when manager joins
+    try {
+      const Driver = require('./models/Driver');
+      const drivers = await Driver.find({
+        status: { $ne: 'Deleted' },
+        latitude: { $ne: null },
+        longitude: { $ne: null }
+      })
+        .populate('currentRoute', 'name')
+        .select('_id name latitude longitude vehicleNumber currentRoute');
+      
+      console.log(`📡 Sending ${drivers.length} driver locations to manager`);
+      
+      drivers.forEach(driver => {
+        if (driver.latitude && driver.longitude) {
+          const locationData = {
+            driverId: driver._id.toString(),
+            driverName: driver.name,
+            latitude: driver.latitude,
+            longitude: driver.longitude,
+            routeId: driver.currentRoute?._id?.toString(),
+            routeName: driver.currentRoute?.name || 'No Route',
+            vehicleNumber: driver.vehicleNumber,
+            timestamp: new Date().toISOString()
+          };
+          
+          // Send to this specific manager
+          socket.emit('location-update', locationData);
+          socket.emit('driver-location-update', locationData);
+        }
+      });
+    } catch (error) {
+      console.error('Error sending driver locations to manager:', error);
+    }
+  });
+
   // Leave route room
   socket.on('leave-route-room', ({ routeId }) => {
     if (routeId) {

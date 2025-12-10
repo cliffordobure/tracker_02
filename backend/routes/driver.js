@@ -140,12 +140,13 @@ router.post('/location', async (req, res) => {
     // Emit location update via socket.io to route-specific room
     const io = getSocketIO();
     const locationData = {
-      driverId: driver._id,
+      driverId: driver._id.toString(),
       driverName: driver.name,
       latitude: lat,
       longitude: lng,
-      routeId: driver.currentRoute?._id,
+      routeId: driver.currentRoute?._id?.toString(),
       routeName: driver.currentRoute?.name,
+      vehicleNumber: driver.vehicleNumber,
       timestamp: new Date().toISOString()
     };
 
@@ -158,6 +159,9 @@ router.post('/location', async (req, res) => {
     
     // Also broadcast globally for admin/manager tracking
     io.emit('location-update', locationData);
+    // Also broadcast to managers room
+    io.to('managers').emit('location-update', locationData);
+    io.to('managers').emit('driver-location-update', locationData);
 
     res.json({ 
       success: true,
@@ -284,6 +288,33 @@ router.post('/journey/start', async (req, res) => {
     driver.journeyStartedAt = new Date();
     driver.journeyType = journeyType;
     await driver.save();
+
+    // If driver has location data, emit it so managers can see the bus on map
+    if (driver.latitude && driver.longitude) {
+      const locationData = {
+        driverId: driver._id.toString(),
+        driverName: driver.name,
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        routeId: driver.currentRoute?._id?.toString(),
+        routeName: driver.currentRoute?.name,
+        vehicleNumber: driver.vehicleNumber,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Broadcast to managers and admins (global broadcast)
+      io.emit('location-update', locationData);
+      io.emit('driver-location-update', locationData);
+      
+      // Also emit to route room
+      if (driver.currentRoute) {
+        io.to(`route:${driver.currentRoute._id}`).emit('driver-location-update', locationData);
+      }
+      
+      // Broadcast to managers room specifically
+      io.to('managers').emit('location-update', locationData);
+      io.to('managers').emit('driver-location-update', locationData);
+    }
 
     // Send FCM push notifications to all parents
     const parentDeviceTokens = [];
