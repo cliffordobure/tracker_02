@@ -271,16 +271,52 @@ router.post('/teachers', async (req, res) => {
   try {
     const { name, email, password, phone, photo, assignedClass, permissions } = req.body;
 
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        message: 'Name, email, and password are required',
+        error: 'MISSING_REQUIRED_FIELDS'
+      });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        message: 'Password must be at least 6 characters long',
+        error: 'INVALID_PASSWORD'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        message: 'Invalid email format',
+        error: 'INVALID_EMAIL'
+      });
+    }
+
+    // Check if school ID exists
+    if (!req.user || !req.user.sid) {
+      return res.status(400).json({ 
+        message: 'Manager school ID not found',
+        error: 'MISSING_SCHOOL_ID'
+      });
+    }
+
     const existingTeacher = await Staff.findOne({ email });
     if (existingTeacher) {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ 
+        message: 'Email already exists',
+        error: 'EMAIL_EXISTS'
+      });
     }
 
     const teacher = new Staff({
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       password,
-      phone,
+      phone: phone ? phone.trim() : undefined,
       photo: photo || '/uploads/default-teacher.png',
       sid: req.user.sid,
       role: 'teacher',
@@ -295,7 +331,32 @@ router.post('/teachers', async (req, res) => {
 
     res.status(201).json({ message: 'Teacher created successfully', teacher: teacherData });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Error creating teacher:', error);
+    
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        message: `${field} already exists`,
+        error: 'DUPLICATE_KEY',
+        field
+      });
+    }
+
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ 
+        message: 'Validation error',
+        error: 'VALIDATION_ERROR',
+        details: errors
+      });
+    }
+
+    res.status(500).json({ 
+      message: 'Server error while creating teacher',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 

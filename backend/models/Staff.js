@@ -21,7 +21,8 @@ const staffSchema = new mongoose.Schema({
   },
   fid: {
     type: String,
-    unique: true
+    unique: true,
+    sparse: true // Only index non-null values
   },
   sid: {
     type: mongoose.Schema.Types.ObjectId,
