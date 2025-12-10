@@ -315,7 +315,8 @@ router.post('/teachers', async (req, res) => {
       });
     }
 
-    const teacher = new Staff({
+    // Build teacher object
+    const teacherData = {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       password,
@@ -326,7 +327,25 @@ router.post('/teachers', async (req, res) => {
       assignedClass: assignedClass || null,
       permissions: permissions || ['noticeboard', 'send', 'receive'],
       status: 'Active'
-    });
+    };
+
+    // Only include fid if it's explicitly provided and not empty
+    // This prevents unique constraint issues with empty strings or undefined values
+    // With sparse index, undefined/null values are allowed multiple times
+    if (req.body.fid && typeof req.body.fid === 'string' && req.body.fid.trim() !== '') {
+      // Check if this fid already exists
+      const existingFid = await Staff.findOne({ fid: req.body.fid.trim() });
+      if (existingFid) {
+        return res.status(400).json({ 
+          message: 'Faculty ID already exists',
+          error: 'FID_EXISTS'
+        });
+      }
+      teacherData.fid = req.body.fid.trim();
+    }
+    // If fid is not provided or is empty, don't include it (will be undefined, which is fine with sparse index)
+
+    const teacher = new Staff(teacherData);
 
     await teacher.save();
     const teacherData = teacher.toObject();

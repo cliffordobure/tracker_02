@@ -22,7 +22,8 @@ const staffSchema = new mongoose.Schema({
   fid: {
     type: String,
     unique: true,
-    sparse: true // Only index non-null values
+    sparse: true, // Only index non-null values
+    default: undefined // Explicitly set to undefined if not provided
   },
   sid: {
     type: mongoose.Schema.Types.ObjectId,
