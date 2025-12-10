@@ -304,7 +304,10 @@ router.post('/teachers', async (req, res) => {
       });
     }
 
-    const existingTeacher = await Staff.findOne({ email });
+    // Check for existing teacher with case-insensitive email
+    const existingTeacher = await Staff.findOne({ 
+      email: email.toLowerCase().trim() 
+    });
     if (existingTeacher) {
       return res.status(400).json({ 
         message: 'Email already exists',
@@ -336,8 +339,19 @@ router.post('/teachers', async (req, res) => {
     // Handle MongoDB duplicate key error
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
+      let message = 'This value already exists';
+      
+      // Provide specific messages for known fields
+      if (field === 'email') {
+        message = 'Email already exists';
+      } else if (field === 'fid') {
+        message = 'Faculty ID already exists';
+      } else {
+        message = `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;
+      }
+      
       return res.status(400).json({ 
-        message: `${field} already exists`,
+        message: message,
         error: 'DUPLICATE_KEY',
         field
       });
