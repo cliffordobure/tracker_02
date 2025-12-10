@@ -6,6 +6,7 @@ import Drivers from './Drivers'
 import Teachers from './Teachers'
 import RoutesPage from './Routes'
 import Stops from './Stops'
+import DriverRatings from './DriverRatings'
 
 const ManagerRouter = () => {
   return (
@@ -17,6 +18,7 @@ const ManagerRouter = () => {
       <Route path="/teachers" element={<Teachers />} />
       <Route path="/routes" element={<RoutesPage />} />
       <Route path="/stops" element={<Stops />} />
+      <Route path="/driver-ratings" element={<DriverRatings />} />
       <Route path="*" element={<Navigate to="/manager" replace />} />
     </Routes>
   )

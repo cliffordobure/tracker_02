@@ -70,6 +70,10 @@ const driverSchema = new mongoose.Schema({
     type: String,
     enum: ['pickup', 'drop-off']
   },
+  currentJourneyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Journey'
+  },
   createdAt: {
     type: Date,
     default: Date.now

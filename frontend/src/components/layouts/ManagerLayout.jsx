@@ -25,6 +25,7 @@ const ManagerLayout = ({ children }) => {
     { name: 'Teachers', path: '/manager/teachers', icon: '👨‍🏫' },
     { name: 'Parents', path: '/manager/parents', icon: '👨‍👩‍👧' },
     { name: 'Bus Stops', path: '/manager/stops', icon: '🚏' },
+    { name: 'Driver Ratings', path: '/manager/driver-ratings', icon: '⭐' },
   ]
 
   const isActive = (path) => {

@@ -6,6 +6,7 @@ const Route = require('../models/Route');
 const Student = require('../models/Student');
 const Parent = require('../models/Parent');
 const Notification = require('../models/Notification');
+const Journey = require('../models/Journey');
 const { getSocketIO } = require('../services/socketService');
 const { sendPushNotification } = require('../services/firebaseService');
 
@@ -289,6 +290,26 @@ router.post('/journey/start', async (req, res) => {
     driver.journeyType = journeyType;
     await driver.save();
 
+    // Create Journey record for history
+    const journeyStartedAt = new Date();
+    const journeyStudents = route.students.map(student => ({
+      studentId: student._id,
+      status: 'pending'
+    }));
+
+    const journey = await Journey.create({
+      driverId: driver._id,
+      routeId: route._id,
+      status: 'in_progress',
+      journeyType: journeyType,
+      startedAt: journeyStartedAt,
+      students: journeyStudents
+    });
+
+    // Store journey ID in driver for reference
+    driver.currentJourneyId = journey._id;
+    await driver.save();
+
     // If driver has location data, emit it so managers can see the bus on map
     if (driver.latitude && driver.longitude) {
       const locationData = {
@@ -397,10 +418,11 @@ router.post('/student/pickup', async (req, res) => {
       return res.status(403).json({ message: 'Student is not on your route' });
     }
 
+    const pickupTime = new Date();
     const student = await Student.findByIdAndUpdate(
       studentId,
       { 
-        pickup: new Date().toISOString(),
+        pickup: pickupTime.toISOString(),
         status: 'Active'
       },
       { new: true }
@@ -408,6 +430,20 @@ router.post('/student/pickup', async (req, res) => {
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Update Journey record if exists
+    const driverWithJourney = await Driver.findById(req.user._id);
+    if (driverWithJourney.currentJourneyId) {
+      await Journey.updateOne(
+        { _id: driverWithJourney.currentJourneyId, 'students.studentId': studentId },
+        {
+          $set: {
+            'students.$.pickedUpAt': pickupTime,
+            'students.$.status': 'picked_up'
+          }
+        }
+      );
     }
 
     // Create notifications for parents
@@ -514,10 +550,11 @@ router.post('/student/drop', async (req, res) => {
       return res.status(403).json({ message: 'Student is not on your route' });
     }
 
+    const dropTime = new Date();
     const student = await Student.findByIdAndUpdate(
       studentId,
       { 
-        dropped: new Date().toISOString(),
+        dropped: dropTime.toISOString(),
         status: 'Active'
       },
       { new: true }
@@ -525,6 +562,20 @@ router.post('/student/drop', async (req, res) => {
 
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Update Journey record if exists
+    const driverWithJourney = await Driver.findById(req.user._id);
+    if (driverWithJourney.currentJourneyId) {
+      await Journey.updateOne(
+        { _id: driverWithJourney.currentJourneyId, 'students.studentId': studentId },
+        {
+          $set: {
+            'students.$.droppedAt': dropTime,
+            'students.$.status': 'dropped'
+          }
+        }
+      );
     }
 
     // Create notifications for parents
@@ -629,15 +680,56 @@ router.post('/journey/end', async (req, res) => {
 
     const route = await Route.findById(driver.currentRoute._id);
 
+    // Store journey type before clearing driver data
+    const journeyType = driver.journeyType || (new Date().getHours() < 12 ? 'pickup' : 'drop-off');
+
+    // Update Journey record if exists
+    const endedAt = new Date();
+    if (driver.currentJourneyId) {
+      // Get current student pickup/drop times from Student model
+      const routeWithStudents = await Route.findById(route._id).populate('students');
+      
+      // Update each student in the journey
+      for (const student of routeWithStudents.students) {
+        const updateData = {};
+        if (student.pickup) {
+          updateData['students.$.pickedUpAt'] = new Date(student.pickup);
+          if (student.dropped) {
+            updateData['students.$.droppedAt'] = new Date(student.dropped);
+            updateData['students.$.status'] = 'dropped';
+          } else {
+            updateData['students.$.status'] = 'picked_up';
+          }
+        } else if (student.dropped) {
+          updateData['students.$.droppedAt'] = new Date(student.dropped);
+          updateData['students.$.status'] = 'dropped';
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await Journey.updateOne(
+            { _id: driver.currentJourneyId, 'students.studentId': student._id },
+            { $set: updateData }
+          );
+        }
+      }
+
+      // Mark journey as completed
+      await Journey.findByIdAndUpdate(
+        driver.currentJourneyId,
+        {
+          status: 'completed',
+          endedAt: endedAt
+        }
+      );
+    }
+
     // Update driver journey status
     driver.journeyStatus = 'completed';
+    driver.currentJourneyId = null; // Clear current journey reference
     await driver.save();
 
     // Get Socket.io instance
     const io = getSocketIO();
-
-    // Determine journey type for notification message
-    const journeyType = driver.journeyType || (new Date().getHours() < 12 ? 'pickup' : 'drop-off');
     
     // Create notification message based on journey type
     const notificationMessage = journeyType === 'pickup'
@@ -831,6 +923,134 @@ router.get('/journey/status', async (req, res) => {
       success: false,
       message: 'Server error',
       error: error.message 
+    });
+  }
+});
+
+// Get driver journey history
+router.get('/journey/history', async (req, res) => {
+  try {
+    if (req.userRole !== 'driver') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied. Driver role required.',
+        error: 'ACCESS_DENIED'
+      });
+    }
+
+    const driverId = req.user._id;
+    const {
+      page = 1,
+      limit = 20,
+      startDate,
+      endDate
+    } = req.query;
+
+    // Validate pagination parameters
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build query
+    const query = { driverId };
+
+    // Add date filters
+    if (startDate || endDate) {
+      query.startedAt = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        query.startedAt.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.startedAt.$lte = end;
+      }
+    }
+
+    // Only return completed journeys for history
+    query.status = 'completed';
+
+    // Calculate pagination
+    const totalItems = await Journey.countDocuments(query);
+    const totalPages = Math.ceil(totalItems / limitNum);
+
+    // Fetch journeys with population
+    const journeys = await Journey.find(query)
+      .populate({
+        path: 'routeId',
+        select: 'name stops',
+        populate: {
+          path: 'stops',
+          select: 'name address latitude longitude order'
+        }
+      })
+      .populate({
+        path: 'students.studentId',
+        select: 'name photo grade',
+        match: { isdelete: { $ne: true } }
+      })
+      .sort({ startedAt: -1 }) // Newest first
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    // Format response
+    const formattedJourneys = journeys.map(journey => {
+      // Filter out null students (deleted students)
+      const validStudents = journey.students.filter(s => s.studentId !== null);
+
+      return {
+        id: journey._id.toString(),
+        journeyId: journey._id.toString(),
+        route: journey.routeId ? {
+          id: journey.routeId._id.toString(),
+          name: journey.routeId.name,
+          stops: journey.routeId.stops || []
+        } : null,
+        routeName: journey.routeId?.name || 'Unknown Route',
+        status: journey.status,
+        journeyStatus: journey.status,
+        startedAt: journey.startedAt,
+        startTime: journey.startedAt,
+        endedAt: journey.endedAt,
+        endTime: journey.endedAt,
+        completedAt: journey.endedAt,
+        createdAt: journey.createdAt,
+        students: validStudents.map(s => ({
+          id: s.studentId?._id?.toString() || s.studentId?.id,
+          name: s.studentId?.name,
+          studentName: s.studentId?.name,
+          pickedUpAt: s.pickedUpAt,
+          pickupTime: s.pickedUpAt,
+          droppedAt: s.droppedAt,
+          dropTime: s.droppedAt
+        })),
+        studentsCount: validStudents.length,
+        totalStudents: validStudents.length
+      };
+    });
+
+    res.json({
+      success: true,
+      message: 'Journey history retrieved successfully',
+      data: formattedJourneys,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalItems,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching journey history:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
