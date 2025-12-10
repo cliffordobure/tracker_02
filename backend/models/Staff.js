@@ -21,9 +21,10 @@ const staffSchema = new mongoose.Schema({
   },
   fid: {
     type: String,
-    unique: true,
-    sparse: true, // Only index non-null values
-    default: undefined // Explicitly set to undefined if not provided
+    // Removed unique constraint - not used in this system
+    // If needed in future, can be re-added with proper sparse index
+    sparse: true,
+    default: undefined
   },
   sid: {
     type: mongoose.Schema.Types.ObjectId,
@@ -74,6 +75,11 @@ const staffSchema = new mongoose.Schema({
 });
 
 staffSchema.pre('save', async function(next) {
+  // Remove fid field if it's null or empty (not used in this system)
+  if (this.fid === null || this.fid === '') {
+    this.fid = undefined;
+  }
+  
   if (!this.isModified('password')) {
     return next();
   }

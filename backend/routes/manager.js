@@ -329,29 +329,19 @@ router.post('/teachers', async (req, res) => {
       status: 'Active'
     };
 
-    // Only include fid if it's explicitly provided and not empty
-    // This prevents unique constraint issues with empty strings or undefined values
-    // With sparse index, undefined/null values are allowed multiple times
-    if (req.body.fid && typeof req.body.fid === 'string' && req.body.fid.trim() !== '') {
-      // Check if this fid already exists
-      const existingFid = await Staff.findOne({ fid: req.body.fid.trim() });
-      if (existingFid) {
-        return res.status(400).json({ 
-          message: 'Faculty ID already exists',
-          error: 'FID_EXISTS'
-        });
-      }
-      teacherData.fid = req.body.fid.trim();
-    }
-    // If fid is not provided or is empty, don't include it (will be undefined, which is fine with sparse index)
+    // Explicitly do NOT include fid field - it's not used in this system
+    // The pre-save hook will ensure it's undefined if somehow set
 
     const teacher = new Staff(teacherData);
+    
+    // Explicitly unset fid to ensure it's not in the document
+    teacher.fid = undefined;
 
     await teacher.save();
-    const teacherData = teacher.toObject();
-    delete teacherData.password;
+    const savedTeacher = teacher.toObject();
+    delete savedTeacher.password;
 
-    res.status(201).json({ message: 'Teacher created successfully', teacher: teacherData });
+    res.status(201).json({ message: 'Teacher created successfully', teacher: savedTeacher });
   } catch (error) {
     console.error('Error creating teacher:', error);
     
@@ -363,8 +353,6 @@ router.post('/teachers', async (req, res) => {
       // Provide specific messages for known fields
       if (field === 'email') {
         message = 'Email already exists';
-      } else if (field === 'fid') {
-        message = 'Faculty ID already exists';
       } else {
         message = `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;
       }
