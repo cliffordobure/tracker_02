@@ -19,10 +19,9 @@ const Reports = () => {
   }
 
   const generateReportData = () => {
-    if (!dashboardStats) return null
-
     switch (reportType) {
       case 'summary':
+        if (!dashboardStats) return null
         return {
           title: 'System Summary Report',
           date: new Date().toLocaleDateString(),
@@ -97,8 +96,11 @@ const Reports = () => {
           </select>
         </div>
 
-        {loading ? (
-          <div className="text-center py-12">Loading report data...</div>
+        {loading && !dashboardStats && !reports ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading report data...</p>
+          </div>
         ) : reportData ? (
           <div className="card print:shadow-none">
             {/* Print Header - Only visible when printing */}
@@ -259,7 +261,13 @@ const Reports = () => {
           </div>
         ) : (
           <div className="card text-center py-12">
-            <p className="text-gray-500">No report data available</p>
+            <p className="text-gray-500 mb-2">No report data available</p>
+            {reportType === 'summary' && !dashboardStats && (
+              <p className="text-sm text-gray-400">Dashboard statistics are loading...</p>
+            )}
+            {reportType !== 'summary' && !reports && (
+              <p className="text-sm text-gray-400">Report data is loading...</p>
+            )}
           </div>
         )}
       </div>

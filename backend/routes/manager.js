@@ -8,6 +8,7 @@ const Route = require('../models/Route');
 const Student = require('../models/Student');
 const Staff = require('../models/Staff');
 const DriverRating = require('../models/DriverRating');
+const Journey = require('../models/Journey');
 
 router.use(authenticate);
 router.use(authorize('manager'));
@@ -1054,6 +1055,160 @@ router.get('/drivers/:driverId/ratings', async (req, res) => {
       success: false,
       message: 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get trip/journey history for manager's school
+router.get('/trips', async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      startDate,
+      endDate,
+      status,
+      journeyType
+    } = req.query;
+
+    // Get all drivers in this manager's school
+    const schoolDrivers = await Driver.find({ 
+      sid: req.user.sid,
+      status: { $ne: 'Deleted' }
+    }).select('_id');
+
+    const driverIds = schoolDrivers.map(d => d._id);
+
+    if (driverIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: parseInt(limit)
+        }
+      });
+    }
+
+    // Build query
+    const query = { driverId: { $in: driverIds } };
+
+    // Add date filters
+    if (startDate || endDate) {
+      query.startedAt = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        query.startedAt.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.startedAt.$lte = end;
+      }
+    }
+
+    // Add status filter
+    if (status) {
+      query.status = status;
+    }
+
+    // Add journey type filter
+    if (journeyType) {
+      query.journeyType = journeyType;
+    }
+
+    // Calculate pagination
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const totalItems = await Journey.countDocuments(query);
+    const totalPages = Math.ceil(totalItems / limitNum);
+
+    // Fetch journeys with population
+    const journeys = await Journey.find(query)
+      .populate({
+        path: 'driverId',
+        select: 'name email phone vehicleNumber'
+      })
+      .populate({
+        path: 'routeId',
+        select: 'name stops',
+        populate: {
+          path: 'stops',
+          select: 'name address'
+        }
+      })
+      .populate({
+        path: 'students.studentId',
+        select: 'name grade photo',
+        match: { isdelete: { $ne: true } }
+      })
+      .sort({ startedAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    // Format response
+    const formattedTrips = journeys.map(journey => {
+      // Filter out null students (deleted students)
+      const validStudents = journey.students.filter(s => s.studentId !== null);
+
+      return {
+        id: journey._id.toString(),
+        driver: journey.driverId ? {
+          id: journey.driverId._id.toString(),
+          name: journey.driverId.name,
+          email: journey.driverId.email,
+          phone: journey.driverId.phone,
+          vehicleNumber: journey.driverId.vehicleNumber
+        } : null,
+        route: journey.routeId ? {
+          id: journey.routeId._id.toString(),
+          name: journey.routeId.name,
+          stops: journey.routeId.stops || []
+        } : null,
+        routeName: journey.routeId?.name || 'Unknown Route',
+        status: journey.status,
+        journeyType: journey.journeyType,
+        startedAt: journey.startedAt,
+        endedAt: journey.endedAt,
+        students: validStudents.map(s => ({
+          id: s.studentId?._id?.toString(),
+          name: s.studentId?.name,
+          grade: s.studentId?.grade,
+          pickedUpAt: s.pickedUpAt,
+          droppedAt: s.droppedAt,
+          status: s.status
+        })),
+        studentsCount: validStudents.length,
+        duration: journey.endedAt && journey.startedAt 
+          ? Math.round((new Date(journey.endedAt) - new Date(journey.startedAt)) / 1000 / 60) // Duration in minutes
+          : null
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formattedTrips,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalItems,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching trips:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
     });
   }
 });

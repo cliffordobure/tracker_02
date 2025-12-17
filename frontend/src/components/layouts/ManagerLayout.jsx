@@ -22,10 +22,11 @@ const ManagerLayout = ({ children }) => {
     { name: 'Students', path: '/manager/students', icon: '👨‍🎓' },
     { name: 'Routes', path: '/manager/routes', icon: '🗺️' },
     { name: 'Drivers', path: '/manager/drivers', icon: '🚗' },
-    { name: 'Teachers', path: '/manager/teachers', icon: '👨‍🏫' },
+    { name: 'Staff', path: '/manager/teachers', icon: '👨‍💼' },
     { name: 'Parents', path: '/manager/parents', icon: '👨‍👩‍👧' },
     { name: 'Bus Stops', path: '/manager/stops', icon: '🚏' },
     { name: 'Driver Ratings', path: '/manager/driver-ratings', icon: '⭐' },
+    { name: 'Reports', path: '/manager/reports', icon: '📄' },
   ]
 
   const isActive = (path) => {
