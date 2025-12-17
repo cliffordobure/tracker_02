@@ -11,9 +11,26 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
+// Socket.IO CORS origins
+const socketOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
+  : ["http://localhost:3000", "http://localhost:49154"];
+
+// Add production URLs for Socket.IO
+const socketProductionUrls = [
+  'https://track-toto.vercel.app'
+];
+
+socketProductionUrls.forEach(url => {
+  const cleanUrl = url.replace(/\/$/, ''); // Remove trailing slash
+  if (!socketOrigins.includes(cleanUrl) && !socketOrigins.includes(url)) {
+    socketOrigins.push(cleanUrl);
+  }
+});
+
 const io = socketIo(server, {
   cors: {
-    origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : ["http://localhost:3000", "http://localhost:49154", "*"],
+    origin: socketOrigins.length > 0 ? socketOrigins : "*",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true
   },
@@ -28,6 +45,19 @@ setSocketIO(io);
 const allowedOrigins = process.env.FRONTEND_URL 
   ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
   : ["http://localhost:3000", "http://localhost:49154"];
+
+// Add production URLs
+const productionUrls = [
+  'https://track-toto.vercel.app'
+];
+
+// Add production URLs if not already present
+productionUrls.forEach(url => {
+  const cleanUrl = url.replace(/\/$/, ''); // Remove trailing slash
+  if (!allowedOrigins.includes(cleanUrl) && !allowedOrigins.includes(url)) {
+    allowedOrigins.push(cleanUrl);
+  }
+});
 
 // Add production URL if backend is on Render
 if (process.env.RENDER && !allowedOrigins.includes(process.env.RENDER_EXTERNAL_URL)) {
