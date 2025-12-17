@@ -3,6 +3,7 @@ import authReducer from './slices/authSlice'
 import adminReducer from './slices/adminSlice'
 import managerReducer from './slices/managerSlice'
 import parentReducer from './slices/parentSlice'
+import driverReducer from './slices/driverSlice'
 import schoolsReducer from './slices/schoolsSlice'
 import managersReducer from './slices/managersSlice'
 import managerStudentsReducer from './slices/managerStudentsSlice'
@@ -17,6 +18,7 @@ export const store = configureStore({
     admin: adminReducer,
     manager: managerReducer,
     parent: parentReducer,
+    driver: driverReducer,
     schools: schoolsReducer,
     managers: managersReducer,
     managerStudents: managerStudentsReducer,

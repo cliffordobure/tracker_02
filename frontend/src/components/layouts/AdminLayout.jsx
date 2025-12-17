@@ -21,6 +21,8 @@ const AdminLayout = ({ children }) => {
     { name: 'Dashboard', path: '/admin', icon: '📊' },
     { name: 'Schools', path: '/admin/schools', icon: '🏫' },
     { name: 'Managers', path: '/admin/managers', icon: '👥' },
+    { name: 'Staff', path: '/admin/staff', icon: '👨‍💼' },
+    { name: 'Reports', path: '/admin/reports', icon: '📄' },
   ]
 
   const isActive = (path) => {

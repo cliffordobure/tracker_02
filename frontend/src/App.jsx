@@ -7,7 +7,8 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import AdminRouter from './pages/admin/AdminRouter'
 import ManagerRouter from './pages/manager/ManagerRouter'
-import ParentDashboard from './pages/parent/Dashboard'
+import ParentRouter from './pages/parent/ParentRouter'
+import DriverRouter from './pages/driver/DriverRouter'
 
 function App() {
   const dispatch = useDispatch()
@@ -44,7 +45,15 @@ function App() {
         path="/parent/*"
         element={
           <PrivateRoute allowedRoles={['parent']}>
-            <ParentDashboard />
+            <ParentRouter />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/driver/*"
+        element={
+          <PrivateRoute allowedRoles={['driver']}>
+            <DriverRouter />
           </PrivateRoute>
         }
       />

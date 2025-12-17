@@ -8,6 +8,7 @@ const Student = require('../models/Student');
 const Route = require('../models/Route');
 const Driver = require('../models/Driver');
 const Parent = require('../models/Parent');
+const Staff = require('../models/Staff');
 
 // Apply authentication to all routes
 router.use(authenticate);
@@ -221,6 +222,46 @@ router.delete('/managers/:id', async (req, res) => {
       return res.status(404).json({ message: 'Manager not found' });
     }
     res.json({ message: 'Manager suspended successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get all staff (across all schools)
+router.get('/staff', async (req, res) => {
+  try {
+    const staff = await Staff.find({ isdelete: false })
+      .select('-password')
+      .populate('sid', 'name')
+      .sort({ createdAt: -1 });
+    res.json(staff);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get reports data
+router.get('/reports', async (req, res) => {
+  try {
+    const schools = await School.find({})
+      .select('name city status')
+      .sort({ name: 1 });
+    
+    const managers = await Manager.find({})
+      .select('-password')
+      .populate('sid', 'name')
+      .sort({ createdAt: -1 });
+    
+    const staff = await Staff.find({ isdelete: false })
+      .select('-password')
+      .populate('sid', 'name')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      schools,
+      managers,
+      staff
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

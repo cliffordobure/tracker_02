@@ -415,10 +415,10 @@ router.put('/teachers/:id', async (req, res) => {
     teacher.updatedAt = Date.now();
 
     await teacher.save();
-    const teacherData = teacher.toObject();
-    delete teacherData.password;
+    const updatedTeacher = teacher.toObject();
+    delete updatedTeacher.password;
 
-    res.json({ message: 'Teacher updated successfully', teacher: teacherData });
+    res.json({ message: 'Teacher updated successfully', teacher: updatedTeacher });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
