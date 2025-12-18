@@ -23,6 +23,7 @@ const ManagerLayout = ({ children }) => {
     { name: 'Routes', path: '/manager/routes', icon: '🗺️' },
     { name: 'Drivers', path: '/manager/drivers', icon: '🚗' },
     { name: 'Staff', path: '/manager/teachers', icon: '👨‍💼' },
+    { name: 'Notices', path: '/manager/notices', icon: '📢' },
     { name: 'Parents', path: '/manager/parents', icon: '👨‍👩‍👧' },
     { name: 'Bus Stops', path: '/manager/stops', icon: '🚏' },
     { name: 'Driver Ratings', path: '/manager/driver-ratings', icon: '⭐' },

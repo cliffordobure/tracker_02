@@ -9,6 +9,9 @@ const Student = require('../models/Student');
 const Staff = require('../models/Staff');
 const DriverRating = require('../models/DriverRating');
 const Journey = require('../models/Journey');
+const Noticeboard = require('../models/Noticeboard');
+const Notification = require('../models/Notification');
+const { getSocketIO } = require('../services/socketService');
 
 router.use(authenticate);
 router.use(authorize('manager'));
@@ -1205,6 +1208,190 @@ router.get('/trips', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching trips:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// ==================== NOTICEBOARD MANAGEMENT (MANAGER) ====================
+
+// Get notices for manager's school
+router.get('/notices', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, category } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const query = {
+      sid: req.user.sid,
+      isdelete: false
+    };
+
+    if (category) {
+      query.category = category;
+    }
+
+    const notices = await Noticeboard.find(query)
+      .populate('studentId', 'name photo')
+      .sort({ priority: 1, createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip);
+
+    const total = await Noticeboard.countDocuments(query);
+
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+
+    const noticesData = notices.map(notice => ({
+      id: notice._id,
+      title: notice.title,
+      message: notice.message,
+      category: notice.category || 'general',
+      priority: notice.priority || 'normal',
+      student: notice.studentId ? {
+        id: notice.studentId._id,
+        name: notice.studentId.name,
+        photo: notice.studentId.photo
+      } : null,
+      attachments: notice.attachments.map(att => {
+        if (att.startsWith('http://') || att.startsWith('https://')) {
+          return att;
+        }
+        return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
+      }),
+      createdAt: notice.createdAt
+    }));
+
+    res.json({
+      success: true,
+      message: 'success',
+      data: noticesData,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching manager notices:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Create notice (optionally for specific student, or for all students in school)
+router.post('/notices', async (req, res) => {
+  try {
+    const { title, message, category, priority, studentId, attachments } = req.body;
+
+    if (!title || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title and message are required',
+        error: 'MISSING_FIELDS'
+      });
+    }
+
+    // Verify student if provided
+    if (studentId) {
+      const student = await Student.findById(studentId);
+      if (!student || student.sid.toString() !== req.user.sid.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied',
+          error: 'ACCESS_DENIED'
+        });
+      }
+    }
+
+    const notice = new Noticeboard({
+      sid: req.user.sid,
+      studentId: studentId || null,
+      title,
+      message,
+      category: category || 'general',
+      priority: priority || 'normal',
+      attachments: attachments || []
+    });
+
+    await notice.save();
+
+    const io = getSocketIO();
+
+    if (studentId) {
+      // Notify parents of a specific student
+      const student = await Student.findById(studentId).populate('parents');
+      if (student && student.parents && student.parents.length > 0) {
+        for (const parent of student.parents) {
+          await Notification.create({
+            pid: parent._id,
+            sid: req.user.sid,
+            message: `📢 New notice: ${title}`,
+            type: 'notice',
+            studentId: student._id
+          });
+
+          io.to(`parent:${parent._id}`).emit('notification', {
+            type: 'notice',
+            noticeId: notice._id,
+            title,
+            message,
+            student: {
+              id: student._id,
+              name: student.name
+            },
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    } else {
+      // General notice - notify all parents in this manager's school
+      const students = await Student.find({ sid: req.user.sid, isdelete: false }).populate('parents');
+      const parentIds = new Set();
+
+      students.forEach(s => {
+        if (s.parents) {
+          s.parents.forEach(p => p && p._id && parentIds.add(p._id.toString()));
+        }
+      });
+
+      for (const parentId of parentIds) {
+        await Notification.create({
+          pid: parentId,
+          sid: req.user.sid,
+          message: `📢 New notice: ${title}`,
+          type: 'notice'
+        });
+
+        io.to(`parent:${parentId}`).emit('notification', {
+          type: 'notice',
+          noticeId: notice._id,
+          title,
+          message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Notice created successfully',
+      data: {
+        id: notice._id,
+        title: notice.title,
+        message: notice.message,
+        category: notice.category,
+        priority: notice.priority,
+        createdAt: notice.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error creating manager notice:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
