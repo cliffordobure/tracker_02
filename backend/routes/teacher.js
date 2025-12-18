@@ -319,7 +319,8 @@ router.get('/diary', verifyTeacher, async (req, res) => {
       teacherNoteVisible: entry.teacherNoteVisible,
       parentSignature: entry.parentSignature ? {
         signedBy: entry.parentSignature.signedBy,
-        signedAt: entry.parentSignature.signedAt
+        signedAt: entry.parentSignature.signedAt,
+        signature: entry.parentSignature.signature
       } : null,
       createdAt: entry.createdAt
     }));
@@ -345,90 +346,109 @@ router.get('/diary', verifyTeacher, async (req, res) => {
   }
 });
 
-// Create diary entry
+// Create diary entry (single student or entire class)
 router.post('/diary', verifyTeacher, async (req, res) => {
   try {
-    const { studentId, content, date, attachments, teacherNote } = req.body;
+    const { studentId, studentIds, sendToAll, content, date, attachments, teacherNote } = req.body;
     const teacher = await Staff.findById(req.user._id);
 
-    if (!studentId || !content) {
-      return res.status(400).json({ 
+    // Basic validation
+    const hasAnyStudent =
+      !!studentId ||
+      (Array.isArray(studentIds) && studentIds.length > 0) ||
+      sendToAll === true;
+
+    if (!hasAnyStudent || !content) {
+      return res.status(400).json({
         success: false,
-        message: 'Student ID and content are required',
+        message: 'Content and at least one target student are required',
         error: 'MISSING_FIELDS'
       });
     }
 
     // Validate teacherNote length if provided
     if (teacherNote && teacherNote.length > 500) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: 'Teacher note must be less than 500 characters',
         error: 'VALIDATION_ERROR'
       });
     }
 
-    // Verify student is in teacher's class
-    const student = await Student.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ 
+    // Determine target students
+    let targetStudentQuery;
+
+    if (sendToAll === true || studentId === 'ALL' || studentId === 'all') {
+      // All students in teacher's class
+      targetStudentQuery = {
+        sid: teacher.sid,
+        grade: teacher.assignedClass,
+        isdelete: false
+      };
+    } else {
+      // Specific student(s)
+      const targetIds = Array.isArray(studentIds) && studentIds.length > 0
+        ? studentIds
+        : [studentId];
+
+      targetStudentQuery = {
+        _id: { $in: targetIds },
+        sid: teacher.sid,
+        grade: teacher.assignedClass,
+        isdelete: false
+      };
+    }
+
+    const students = await Student.find(targetStudentQuery).populate('parents');
+
+    if (!students || students.length === 0) {
+      return res.status(404).json({
         success: false,
-        message: 'Student not found',
+        message: 'No valid students found in your class for this diary',
         error: 'STUDENT_NOT_FOUND'
       });
     }
 
-    // Case-insensitive grade comparison
-    const studentGrade = (student.grade || '').trim().toLowerCase();
-    const teacherClass = (teacher.assignedClass || '').trim().toLowerCase();
-    
-    if (studentGrade !== teacherClass || student.sid.toString() !== teacher.sid.toString()) {
-      return res.status(403).json({ 
-        success: false,
-        message: 'Access denied. Student is not in your assigned class.',
-        error: 'ACCESS_DENIED'
-      });
-    }
-
-    const diaryEntry = new Diary({
-      studentId,
-      teacherId: teacher._id,
-      teacherName: teacher.name,
-      content,
-      date: date ? new Date(date) : new Date(),
-      attachments: attachments || [],
-      teacherNote: teacherNote || null,
-      teacherNoteVisible: false // Always false initially
-    });
-
-    await diaryEntry.save();
-
-    // Notify parents
     const io = getSocketIO();
-    if (student.parents && student.parents.length > 0) {
-      for (const parentId of student.parents) {
-        await Notification.create({
-          pid: parentId,
-          sid: student.sid,
-          message: `📔 New diary entry for ${student.name}`,
-          type: 'general',
-          studentId: student._id
-        });
+    const createdEntries = [];
+    const entryDate = date ? new Date(date) : new Date();
 
-        io.to(`parent:${parentId}`).emit('notification', {
-          type: 'diary_entry',
-          studentId: student._id,
-          studentName: student.name,
-          message: `New diary entry for ${student.name}`,
-          timestamp: new Date().toISOString()
-        });
+    for (const student of students) {
+      const diaryEntry = new Diary({
+        studentId: student._id,
+        teacherId: teacher._id,
+        teacherName: teacher.name,
+        content,
+        date: entryDate,
+        attachments: attachments || [],
+        teacherNote: teacherNote || null,
+        teacherNoteVisible: false // Always false initially
+      });
+
+      await diaryEntry.save();
+
+      // Notify parents for this student
+      if (student.parents && student.parents.length > 0) {
+        for (const parentId of student.parents) {
+          await Notification.create({
+            pid: parentId,
+            sid: student.sid,
+            message: `📔 New diary entry for ${student.name}`,
+            type: 'general',
+            studentId: student._id
+          });
+
+          io.to(`parent:${parentId}`).emit('notification', {
+            type: 'diary_entry',
+            studentId: student._id,
+            studentName: student.name,
+            message: `New diary entry for ${student.name}`,
+            timestamp: new Date().toISOString()
+          });
+        }
       }
-    }
 
-    res.status(201).json({
-      success: true,
-      message: 'Diary entry created successfully',
-      data: {
+      createdEntries.push({
         id: diaryEntry._id,
         student: {
           id: student._id,
@@ -440,14 +460,63 @@ router.post('/diary', verifyTeacher, async (req, res) => {
         teacherNote: diaryEntry.teacherNote,
         teacherNoteVisible: diaryEntry.teacherNoteVisible,
         createdAt: diaryEntry.createdAt
+      });
+    }
+
+    // Notify teacher that diary has been sent
+    const teacherNotificationMessage =
+      createdEntries.length > 1
+        ? `📔 Diary sent for ${createdEntries.length} students in your class`
+        : `📔 Diary sent for ${createdEntries[0].student.name}`;
+
+    io.to(`teacher:${teacher._id}`).emit('notification', {
+      type: 'diary_sent',
+      teacherId: teacher._id,
+      entriesCount: createdEntries.length,
+      entries: createdEntries.map(entry => ({
+        id: entry.id,
+        studentId: entry.student.id,
+        studentName: entry.student.name,
+        date: entry.date
+      })),
+      message: teacherNotificationMessage,
+      timestamp: new Date().toISOString()
+    });
+
+    // Optional: push notification to teacher's device
+    if (teacher.deviceToken && teacher.deviceToken.trim() !== '') {
+      try {
+        await sendToDevice(
+          teacher.deviceToken,
+          teacherNotificationMessage,
+          {
+            type: 'diary_sent',
+            entriesCount: createdEntries.length
+          },
+          '📔 Diary Sent'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to teacher for diary:', fcmError);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message:
+        createdEntries.length > 1
+          ? 'Diary entries created successfully'
+          : 'Diary entry created successfully',
+      data: {
+        count: createdEntries.length,
+        entries: createdEntries
       }
     });
   } catch (error) {
     console.error('Error creating diary entry:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Server error',
-      error: error.message 
+      error: error.message
     });
   }
 });

@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const Admin = require('../models/Admin');
 const Manager = require('../models/Manager');
 const Parent = require('../models/Parent');
 const Driver = require('../models/Driver');
 const Staff = require('../models/Staff');
+const PasswordResetToken = require('../models/PasswordResetToken');
 
 // Generate JWT Token
 const generateToken = (userId, role) => {
@@ -14,6 +17,42 @@ const generateToken = (userId, role) => {
     process.env.JWT_SECRET || 'your_jwt_secret_key_here',
     { expiresIn: process.env.JWT_EXPIRE || '7d' }
   );
+};
+
+// Helper: get model by role
+const getUserModelByRole = (role) => {
+  switch (role) {
+    case 'admin':
+      return Admin;
+    case 'manager':
+      return Manager;
+    case 'parent':
+      return Parent;
+    case 'driver':
+      return Driver;
+    case 'teacher':
+      return Staff;
+    default:
+      return null;
+  }
+};
+
+// Helper: create nodemailer transporter if SMTP is configured
+const createTransporter = () => {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.warn('SMTP not fully configured - forgot password emails will be logged only.');
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
 };
 
 // Admin Login
@@ -270,6 +309,154 @@ router.post('/teacher/login', async (req, res) => {
       }
     });
   } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ==================== PASSWORD RESET ====================
+
+// Request password reset link
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email, role } = req.body;
+
+    if (!email || !role) {
+      return res.status(400).json({
+        message: 'Email and role are required',
+        error: 'MISSING_FIELDS'
+      });
+    }
+
+    const normalizedRole = role.toLowerCase();
+    const UserModel = getUserModelByRole(normalizedRole);
+
+    if (!UserModel) {
+      return res.status(400).json({
+        message: 'Invalid role',
+        error: 'INVALID_ROLE'
+      });
+    }
+
+    const user = await UserModel.findOne({ email });
+
+    // Always respond with success message to avoid email enumeration
+    if (!user) {
+      return res.json({
+        message: 'If an account with that email exists, a password reset link has been sent.'
+      });
+    }
+
+    // Delete any existing tokens for this user/role
+    await PasswordResetToken.deleteMany({ userId: user._id, role: normalizedRole });
+
+    // Create reset token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await PasswordResetToken.create({
+      userId: user._id,
+      role: normalizedRole,
+      token,
+      expiresAt
+    });
+
+    const frontendBase =
+      process.env.PASSWORD_RESET_URL ||
+      (process.env.FRONTEND_URL && process.env.FRONTEND_URL.split(',')[0]) ||
+      'http://localhost:3000';
+
+    const resetUrl = `${frontendBase.replace(/\/$/, '')}/reset-password?token=${token}&role=${normalizedRole}`;
+
+    const transporter = createTransporter();
+
+    if (transporter) {
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || `"School Bus Tracker" <no-reply@schoolbustracker.com>`,
+          to: user.email,
+          subject: 'Password Reset Request',
+          html: `
+            <p>Hello ${user.name || ''},</p>
+            <p>You requested to reset your password for the School Bus Tracker (${normalizedRole}) account.</p>
+            <p>Click the link below to reset your password. This link will expire in 1 hour.</p>
+            <p><a href="${resetUrl}">${resetUrl}</a></p>
+            <p>If you did not request this, you can safely ignore this email.</p>
+          `
+        });
+      } catch (emailError) {
+        console.error('Error sending password reset email:', emailError);
+      }
+    } else {
+      console.log('Password reset URL (no email sent):', resetUrl);
+    }
+
+    res.json({
+      message: 'If an account with that email exists, a password reset link has been sent.',
+      // In development, return token & URL to simplify testing
+      token: process.env.NODE_ENV === 'development' ? token : undefined,
+      resetUrl: process.env.NODE_ENV === 'development' ? resetUrl : undefined
+    });
+  } catch (error) {
+    console.error('Error in forgot-password:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Reset password using token
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, role, password } = req.body;
+
+    if (!token || !role || !password) {
+      return res.status(400).json({
+        message: 'Token, role and new password are required',
+        error: 'MISSING_FIELDS'
+      });
+    }
+
+    const normalizedRole = role.toLowerCase();
+
+    const resetToken = await PasswordResetToken.findOne({
+      token,
+      role: normalizedRole,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!resetToken) {
+      return res.status(400).json({
+        message: 'Invalid or expired password reset token',
+        error: 'INVALID_TOKEN'
+      });
+    }
+
+    const UserModel = getUserModelByRole(normalizedRole);
+    if (!UserModel) {
+      return res.status(400).json({
+        message: 'Invalid role',
+        error: 'INVALID_ROLE'
+      });
+    }
+
+    const user = await UserModel.findById(resetToken.userId);
+    if (!user) {
+      return res.status(400).json({
+        message: 'User account not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Update password (pre-save hook will hash it)
+    user.password = password;
+    await user.save();
+
+    // Remove all tokens for this user/role
+    await PasswordResetToken.deleteMany({ userId: user._id, role: normalizedRole });
+
+    res.json({
+      message: 'Password has been reset successfully'
+    });
+  } catch (error) {
+    console.error('Error in reset-password:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

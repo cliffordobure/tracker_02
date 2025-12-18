@@ -448,7 +448,11 @@ router.post('/student/pickup', async (req, res) => {
 
     // Create notifications for parents
     const io = getSocketIO();
-    const message = `✅ ${student.name} has been picked up by the bus`;
+    const pickupTimeString = pickupTime.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const message = `✅ ${student.name} has been picked up by the bus at ${pickupTimeString}`;
 
     if (student.parents && student.parents.length > 0) {
       const parentDeviceTokens = [];
@@ -468,6 +472,8 @@ router.post('/student/pickup', async (req, res) => {
           studentId: student._id,
           studentName: student.name,
           message,
+          pickupTime: pickupTime.toISOString(),
+          pickupTimeLocal: pickupTimeString,
           timestamp: new Date().toISOString()
         });
 
@@ -488,7 +494,9 @@ router.post('/student/pickup', async (req, res) => {
               studentId: student._id.toString(),
               studentName: student.name,
               routeId: route._id.toString(),
-              routeName: route.name
+              routeName: route.name,
+              pickupTime: pickupTime.toISOString(),
+              pickupTimeLocal: pickupTimeString
             },
             '✅ Student Boarded'
           );
@@ -509,6 +517,8 @@ router.post('/student/pickup', async (req, res) => {
     io.to(`route:${route._id}`).emit('student-picked-up', {
       studentId: student._id,
       studentName: student.name,
+      pickupTime: pickupTime.toISOString(),
+      pickupTimeLocal: pickupTimeString,
       timestamp: new Date().toISOString()
     });
 
@@ -580,7 +590,11 @@ router.post('/student/drop', async (req, res) => {
 
     // Create notifications for parents
     const io = getSocketIO();
-    const message = `🏠 ${student.name} has been dropped off by the bus`;
+    const dropTimeString = dropTime.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const message = `🏠 ${student.name} has been dropped off by the bus at ${dropTimeString}`;
 
     if (student.parents && student.parents.length > 0) {
       const parentDeviceTokens = [];
@@ -600,6 +614,8 @@ router.post('/student/drop', async (req, res) => {
           studentId: student._id,
           studentName: student.name,
           message,
+          dropTime: dropTime.toISOString(),
+          dropTimeLocal: dropTimeString,
           timestamp: new Date().toISOString()
         });
 
@@ -620,7 +636,9 @@ router.post('/student/drop', async (req, res) => {
               studentId: student._id.toString(),
               studentName: student.name,
               routeId: route._id.toString(),
-              routeName: route.name
+              routeName: route.name,
+              dropTime: dropTime.toISOString(),
+              dropTimeLocal: dropTimeString
             },
             '🏠 Student Dropped'
           );
@@ -641,6 +659,8 @@ router.post('/student/drop', async (req, res) => {
     io.to(`route:${route._id}`).emit('student-dropped', {
       studentId: student._id,
       studentName: student.name,
+      dropTime: dropTime.toISOString(),
+      dropTimeLocal: dropTimeString,
       timestamp: new Date().toISOString()
     });
 

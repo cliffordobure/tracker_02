@@ -434,11 +434,12 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
     })
 
     if (!bounds.isEmpty()) {
-      map.fitBounds(bounds, { padding: 50 })
-      // Limit max zoom
+      // Increase padding a bit and cap max zoom lower so we see more of the road around the bus
+      map.fitBounds(bounds, { padding: 120 })
       const listener = window.google.maps.event.addListener(map, 'bounds_changed', () => {
-        if (map.getZoom() > 15) {
-          map.setZoom(15)
+        // Cap zoom so the view is slightly more zoomed out than before
+        if (map.getZoom() > 12) {
+          map.setZoom(12)
         }
         window.google.maps.event.removeListener(listener)
       })
@@ -531,7 +532,8 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}
-        zoom={activeDrivers > 0 ? 12 : 10}
+        // Slightly more zoomed out so roads and nearby area are visible
+        zoom={activeDrivers > 0 ? 10 : 8}
         onLoad={onLoad}
         onUnmount={onUnmount}
         options={{

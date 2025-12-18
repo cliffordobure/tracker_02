@@ -9,6 +9,9 @@ const Route = require('../models/Route');
 const Driver = require('../models/Driver');
 const Parent = require('../models/Parent');
 const Staff = require('../models/Staff');
+const Noticeboard = require('../models/Noticeboard');
+const Notification = require('../models/Notification');
+const { getSocketIO } = require('../services/socketService');
 
 // Apply authentication to all routes
 router.use(authenticate);
@@ -227,6 +230,99 @@ router.delete('/managers/:id', async (req, res) => {
   }
 });
 
+// ==================== NOTICEBOARD MANAGEMENT ====================
+
+// Create notice for parents of a specific school
+router.post('/notices', async (req, res) => {
+  try {
+    const { sid, title, message, category, priority, attachments } = req.body;
+
+    if (!sid || !title || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'School ID, title and message are required',
+        error: 'MISSING_FIELDS'
+      });
+    }
+
+    const school = await School.findById(sid);
+    if (!school) {
+      return res.status(404).json({
+        message: 'School not found',
+        error: 'SCHOOL_NOT_FOUND'
+      });
+    }
+
+    const notice = new Noticeboard({
+      sid,
+      studentId: null,
+      title,
+      message,
+      category: category || 'general',
+      priority: priority || 'normal',
+      attachments: attachments || []
+    });
+
+    await notice.save();
+
+    // Notify all parents in the school
+    const students = await Student.find({ sid, isdelete: false }).populate('parents');
+    const parentIds = new Set();
+
+    students.forEach(student => {
+      if (student.parents && student.parents.length > 0) {
+        student.parents.forEach(parent => {
+          if (parent && parent._id) {
+            parentIds.add(parent._id.toString());
+          }
+        });
+      }
+    });
+
+    const io = getSocketIO();
+
+    for (const parentId of parentIds) {
+      await Notification.create({
+        pid: parentId,
+        sid,
+        message: `📢 New notice from ${school.name}: ${title}`,
+        type: 'notice'
+      });
+
+      io.to(`parent:${parentId}`).emit('notification', {
+        type: 'notice',
+        noticeId: notice._id,
+        title,
+        message,
+        school: {
+          id: school._id,
+          name: school.name
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.status(201).json({
+      message: 'Notice created successfully',
+      data: {
+        id: notice._id,
+        title: notice.title,
+        message: notice.message,
+        category: notice.category,
+        priority: notice.priority,
+        school: {
+          id: school._id,
+          name: school.name
+        },
+        createdAt: notice.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error creating admin notice:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Get all staff (across all schools)
 router.get('/staff', async (req, res) => {
   try {
@@ -267,9 +363,9 @@ router.get('/reports', async (req, res) => {
   }
 });
 
-// Note: Admin does not have direct access to student/parent details
-// Admin only manages schools and managers
-// Students and parents are managed by individual school managers
+// Note: Admin does not have direct access to individual student/parent records
+// Admin manages schools, managers, and high-level notices
+// Detailed student and parent management is handled by individual school managers
 
 module.exports = router;
 
