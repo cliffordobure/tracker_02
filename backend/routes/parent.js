@@ -649,8 +649,11 @@ router.get('/diary/:entryId', async (req, res) => {
           signedAt: entry.parentSignature.signedAt instanceof Date 
             ? entry.parentSignature.signedAt.toISOString() 
             : entry.parentSignature.signedAt,
-          signature: entry.parentSignature.signature
+          signature: entry.parentSignature.signature,
+          note: entry.parentSignature.note || null
         } : null,
+        // Convenience top-level field for parent note so mobile/web apps can read it easily
+        parentNote: entry.parentNote || (entry.parentSignature && entry.parentSignature.note) || null,
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt
       }
@@ -665,7 +668,7 @@ router.get('/diary/:entryId', async (req, res) => {
 router.post('/diary/:entryId/sign', async (req, res) => {
   try {
     const { entryId } = req.params;
-    const { signature } = req.body; // Base64 encoded signature image or text
+    const { signature, parentNote } = req.body; // Base64 encoded signature image or text + optional note from parent
     const parent = await Parent.findById(req.user._id);
 
     if (!signature || signature.trim() === '') {
@@ -685,12 +688,24 @@ router.post('/diary/:entryId/sign', async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    // Normalise/clean parent note (optional)
+    const cleanParentNote =
+      parentNote && typeof parentNote === 'string' && parentNote.trim().length > 0
+        ? parentNote.trim()
+        : null;
+
     // Update diary entry with parent signature
     entry.parentSignature = {
       signedBy: parent._id,
       signedAt: new Date(),
-      signature: signature
+      signature: signature,
+      note: cleanParentNote
     };
+
+    // Store a copy of the note at root level for easier access in mobile/web apps
+    if (cleanParentNote) {
+      entry.parentNote = cleanParentNote;
+    }
 
     // Make teacher note visible after parent signs
     if (entry.teacherNote) {

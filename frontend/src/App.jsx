@@ -5,6 +5,8 @@ import axios from 'axios'
 import PrivateRoute from './utils/PrivateRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import AdminRouter from './pages/admin/AdminRouter'
 import ManagerRouter from './pages/manager/ManagerRouter'
 import ParentRouter from './pages/parent/ParentRouter'
@@ -25,6 +27,8 @@ function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/admin/*"
         element={

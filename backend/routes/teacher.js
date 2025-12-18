@@ -320,8 +320,11 @@ router.get('/diary', verifyTeacher, async (req, res) => {
       parentSignature: entry.parentSignature ? {
         signedBy: entry.parentSignature.signedBy,
         signedAt: entry.parentSignature.signedAt,
-        signature: entry.parentSignature.signature
+        signature: entry.parentSignature.signature,
+        note: entry.parentSignature.note || null
       } : null,
+      // Expose parentNote at root level so mobile apps can easily show it
+      parentNote: entry.parentNote || (entry.parentSignature && entry.parentSignature.note) || null,
       createdAt: entry.createdAt
     }));
 

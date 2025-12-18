@@ -1,34 +1,38 @@
 import { useState } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { login } from '../store/slices/authSlice'
+import axios from 'axios'
 import toast from 'react-hot-toast'
+import { API_URL } from '../config/api'
 import logo from '../assets/logo.png'
 
-const Login = () => {
+const ForgotPassword = () => {
   const [formData, setFormData] = useState({
     role: 'admin',
     email: '',
-    password: '',
   })
-  const dispatch = useDispatch()
+  const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { loading } = useSelector((state) => state.auth)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    try {
-      const result = await dispatch(login({
-        role: formData.role,
-        email: formData.email,
-        password: formData.password,
-      })).unwrap()
+    setLoading(true)
 
-      toast.success('Login successful!')
-      navigate(`/${formData.role}`)
+    try {
+      await axios.post(`${API_URL}/auth/forgot-password`, {
+        email: formData.email,
+        role: formData.role,
+      })
+
+      toast.success(
+        'If an account with that email exists, a password reset link has been sent.'
+      )
+      navigate('/login')
     } catch (error) {
-      toast.error(error || 'Login failed')
+      const message =
+        error.response?.data?.message || 'Failed to request password reset'
+      toast.error(message)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -37,8 +41,10 @@ const Login = () => {
       <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8">
         <div className="text-center mb-8">
           <img src={logo} alt="Logo" className="h-16 w-16 mx-auto mb-4 object-contain" />
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">School Bus Tracker</h1>
-          <p className="text-gray-600">Sign in to your account</p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Forgot Password</h1>
+          <p className="text-gray-600 text-sm">
+            Enter your email and role and we&apos;ll send you a reset link.
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -56,6 +62,7 @@ const Login = () => {
               <option value="manager">Manager</option>
               <option value="parent">Parent</option>
               <option value="driver">Driver</option>
+              <option value="teacher">Teacher</option>
             </select>
           </div>
 
@@ -73,36 +80,20 @@ const Login = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="input"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
-
-          <div className="flex justify-end -mt-2">
-            <button
-              type="button"
-              onClick={() => navigate('/forgot-password')}
-              className="text-sm text-primary-600 hover:underline"
-            >
-              Forgot password?
-            </button>
-          </div>
-
           <button
             type="submit"
             disabled={loading}
             className="w-full btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Sending reset link...' : 'Send Reset Link'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="w-full mt-2 text-sm text-primary-600 hover:underline"
+          >
+            Back to login
           </button>
         </form>
       </div>
@@ -110,5 +101,6 @@ const Login = () => {
   )
 }
 
-export default Login
+export default ForgotPassword
+
 

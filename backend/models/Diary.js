@@ -39,7 +39,20 @@ const diarySchema = new mongoose.Schema({
     },
     signature: {
       type: String // Base64 encoded signature image or text
+    },
+    // Optional note/comment from parent when signing
+    note: {
+      type: String,
+      trim: true,
+      maxlength: 1000
     }
+  },
+  // Convenience copy of parent's note at root level for easier API consumption
+  parentNote: {
+    type: String,
+    trim: true,
+    default: null,
+    maxlength: 1000
   },
   teacherNote: {
     type: String,
