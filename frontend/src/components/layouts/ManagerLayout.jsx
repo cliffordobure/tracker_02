@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
 import { useSelector } from 'react-redux'
 import logo from '../../assets/logo.png'
+import backgroundImage from '../../assets/background_image.png'
 
 const ManagerLayout = ({ children }) => {
   const navigate = useNavigate()
@@ -38,7 +39,20 @@ const ManagerLayout = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div 
+      className="min-h-screen bg-gray-50 relative"
+      style={{
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {/* Overlay for better readability */}
+      <div className="absolute inset-0 bg-white bg-opacity-85 pointer-events-none"></div>
+      
+      <div className="relative z-10">
       {/* Mobile Header */}
       <header className="bg-white shadow-sm lg:hidden sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8">
@@ -64,23 +78,30 @@ const ManagerLayout = ({ children }) => {
       </header>
 
       {/* Desktop Header */}
-      <header className="hidden lg:block bg-white shadow-sm border-b border-gray-200">
+      <header className="hidden lg:block bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
               <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
-              <h1 className="text-2xl font-bold text-gray-800">Manager Dashboard</h1>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+                  Manager Dashboard
+                </h1>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-700">{user?.name}</p>
+              <div className="text-right hidden xl:block">
+                <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
               </div>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors duration-200"
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition-all duration-200 transform hover:scale-105 flex items-center space-x-2"
               >
-                Logout
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Logout</span>
               </button>
             </div>
           </div>
@@ -163,6 +184,7 @@ const ManagerLayout = ({ children }) => {
         <main className="flex-1 w-full lg:w-auto min-w-0">
           {children}
         </main>
+      </div>
       </div>
     </div>
   )

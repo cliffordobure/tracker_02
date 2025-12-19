@@ -511,22 +511,39 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
   }
 
   return (
-    <div className="w-full h-full relative rounded-lg overflow-hidden border border-gray-200 shadow-lg">
-      <div className="absolute top-4 left-4 z-10 bg-white rounded-lg shadow-md px-4 py-2">
-        <p className="text-sm font-semibold text-gray-700">
-          <span className="text-primary-600">{activeDrivers}</span> Active Bus{activeDrivers !== 1 ? 'es' : ''}
-        </p>
-        {socket && (
-          <p className="text-xs text-green-600 mt-1">● Connected</p>
-        )}
-        {!socket && (
-          <p className="text-xs text-gray-500 mt-1">Connecting...</p>
-        )}
-        {validLocations.length > 0 && (
-          <p className="text-xs text-blue-600 mt-1">
-            {validLocations.length} with valid coordinates
-          </p>
-        )}
+    <div className="w-full h-full relative rounded-lg overflow-hidden border-2 border-gray-200 shadow-2xl">
+      <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm rounded-xl shadow-xl px-5 py-3 border border-gray-200">
+        <div className="flex items-center space-x-3">
+          <div className="flex flex-col">
+            <p className="text-sm font-bold text-gray-800">
+              <span className="text-2xl font-extrabold text-primary-600">{activeDrivers}</span>
+              <span className="ml-2">Active Bus{activeDrivers !== 1 ? 'es' : ''}</span>
+            </p>
+            {socket && (
+              <div className="flex items-center space-x-1 mt-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <p className="text-xs font-semibold text-green-600">Connected</p>
+              </div>
+            )}
+            {!socket && (
+              <div className="flex items-center space-x-1 mt-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                <p className="text-xs font-semibold text-gray-500">Connecting...</p>
+              </div>
+            )}
+          </div>
+          {validLocations.length > 0 && (
+            <div className="h-8 w-px bg-gray-300"></div>
+          )}
+          {validLocations.length > 0 && (
+            <div className="flex flex-col">
+              <p className="text-xs font-medium text-gray-600">Tracking</p>
+              <p className="text-sm font-bold text-blue-600">
+                {validLocations.length} {validLocations.length === 1 ? 'bus' : 'buses'}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
       
       <GoogleMap

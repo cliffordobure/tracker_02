@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
 import { useSelector } from 'react-redux'
 import logo from '../../assets/logo.png'
+import backgroundImage from '../../assets/background_image.png'
 
 const AdminLayout = ({ children }) => {
   const navigate = useNavigate()
@@ -33,7 +34,20 @@ const AdminLayout = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div 
+      className="min-h-screen bg-gray-50 relative"
+      style={{
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {/* Overlay for better readability */}
+      <div className="absolute inset-0 bg-white bg-opacity-85 pointer-events-none"></div>
+      
+      <div className="relative z-10">
       {/* Mobile Header */}
       <header className="bg-white shadow-sm lg:hidden sticky top-0 z-50">
         <div className="px-4 sm:px-6 lg:px-8">
@@ -158,6 +172,7 @@ const AdminLayout = ({ children }) => {
         <main className="flex-1 w-full lg:w-auto min-w-0">
           {children}
         </main>
+      </div>
       </div>
     </div>
   )

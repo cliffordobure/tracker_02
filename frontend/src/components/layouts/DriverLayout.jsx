@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
+import backgroundImage from '../../assets/background_image.png'
 
 const DriverLayout = ({ children }) => {
   const navigate = useNavigate()
@@ -34,7 +35,20 @@ const DriverLayout = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div 
+      className="min-h-screen bg-gray-50 relative"
+      style={{
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {/* Overlay for better readability */}
+      <div className="absolute inset-0 bg-white bg-opacity-85 pointer-events-none"></div>
+      
+      <div className="relative z-10">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8">
@@ -117,6 +131,7 @@ const DriverLayout = ({ children }) => {
         <main className="flex-1 min-h-[calc(100vh-73px)] w-full lg:w-auto">
           {children}
         </main>
+      </div>
       </div>
     </div>
   )
