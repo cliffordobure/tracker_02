@@ -150,10 +150,31 @@ router.get('/students', verifyTeacher, async (req, res) => {
   }
 });
 
-// Mark student as leaving school (when driver picks them up)
-router.post('/students/:studentId/leave-school', verifyTeacher, async (req, res) => {
+// Update student status (Active, Leave, Missing)
+router.put('/students/:studentId/status', verifyTeacher, async (req, res) => {
   try {
     const { studentId } = req.params;
+    const { status, reason } = req.body; // status: 'Active', 'Leave', 'Missing', reason: optional text
+    
+    // Validate studentId
+    if (!studentId || studentId === 'undefined' || studentId === 'null') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid student ID',
+        error: 'INVALID_STUDENT_ID'
+      });
+    }
+
+    // Validate status
+    const validStatuses = ['Active', 'Leave', 'Missing'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        success: false,
+        message: `Status must be one of: ${validStatuses.join(', ')}`,
+        error: 'INVALID_STATUS'
+      });
+    }
+
     const teacher = await Staff.findById(req.user._id);
 
     const student = await Student.findById(studentId)
@@ -189,31 +210,62 @@ router.post('/students/:studentId/leave-school', verifyTeacher, async (req, res)
       });
     }
 
-    // Mark student as leaving school
-    student.leftSchool = new Date().toISOString();
-    student.leftSchoolBy = teacher._id;
+    // Update student status
+    const oldStatus = student.status;
+    student.status = status;
+    
+    // If status is 'Leave', also update leftSchool timestamp
+    if (status === 'Leave') {
+      student.leftSchool = new Date().toISOString();
+      student.leftSchoolBy = teacher._id;
+    } else if (status === 'Active') {
+      // Clear leave information when setting back to Active
+      student.leftSchool = '';
+      student.leftSchoolBy = null;
+    }
+
+    // Store reason if provided (you might want to add a reason field to the Student model)
+    // For now, we'll log it
+    if (reason && reason.trim()) {
+      console.log(`[Teacher] Student ${student.name} status changed to ${status}. Reason: ${reason.trim()}`);
+    }
+
     await student.save();
 
-    // Create notification for parents
+    // Create notification for parents if status changed to Leave or Missing
     const io = getSocketIO();
-    const message = `🚌 ${student.name} has left school and is on the bus (Route: ${student.route?.name || 'N/A'})`;
+    let notificationMessage = '';
+    let notificationType = '';
 
-    if (student.parents && student.parents.length > 0) {
+    if (status === 'Leave') {
+      notificationMessage = reason 
+        ? `📋 ${student.name}'s status has been changed to "On Leave". Reason: ${reason}`
+        : `📋 ${student.name}'s status has been changed to "On Leave"`;
+      notificationType = 'student_on_leave';
+    } else if (status === 'Missing') {
+      notificationMessage = `⚠️ ${student.name} has been marked as "Missing"`;
+      notificationType = 'student_missing';
+    } else if (status === 'Active' && oldStatus !== 'Active') {
+      notificationMessage = `✅ ${student.name}'s status has been changed back to "Active"`;
+      notificationType = 'student_active';
+    }
+
+    if (notificationMessage && student.parents && student.parents.length > 0) {
       for (const parent of student.parents) {
         await Notification.create({
           pid: parent._id,
           sid: student.sid,
-          message,
-          type: 'student_picked_up',
+          message: notificationMessage,
+          type: notificationType,
           studentId: student._id
         });
 
         // Send real-time notification via Socket.io
         io.to(`parent:${parent._id}`).emit('notification', {
-          type: 'student_left_school',
+          type: notificationType,
           studentId: student._id,
           studentName: student.name,
-          message,
+          message: notificationMessage,
           timestamp: new Date().toISOString()
         });
       }
@@ -221,16 +273,83 @@ router.post('/students/:studentId/leave-school', verifyTeacher, async (req, res)
 
     res.json({
       success: true,
+      message: `Student status updated to ${status} successfully`,
+      data: {
+        id: student._id,
+        name: student.name,
+        status: student.status,
+        leftSchool: student.leftSchool || null,
+        leftSchoolBy: student.leftSchoolBy || null
+      }
+    });
+  } catch (error) {
+    console.error('Error updating student status:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error',
+      error: error.message 
+    });
+  }
+});
+
+// Keep the old endpoint for backward compatibility (deprecated - use PUT /students/:studentId/status instead)
+router.post('/students/:studentId/leave-school', verifyTeacher, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    // Validate studentId
+    if (!studentId || studentId === 'undefined' || studentId === 'null') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid student ID',
+        error: 'INVALID_STUDENT_ID'
+      });
+    }
+
+    // Call the new status endpoint logic
+    const teacher = await Staff.findById(req.user._id);
+    const student = await Student.findById(studentId)
+      .populate('parents', 'name email phone deviceToken')
+      .populate('route', 'name');
+
+    if (!student) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Student not found',
+        error: 'STUDENT_NOT_FOUND'
+      });
+    }
+
+    // Verify student is in teacher's class
+    const studentGrade = (student.grade || '').trim().toLowerCase();
+    const teacherClass = (teacher.assignedClass || '').trim().toLowerCase();
+    
+    if (studentGrade !== teacherClass || student.sid.toString() !== teacher.sid.toString()) {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied',
+        error: 'ACCESS_DENIED'
+      });
+    }
+
+    // Update to Leave status
+    student.status = 'Leave';
+    student.leftSchool = new Date().toISOString();
+    student.leftSchoolBy = teacher._id;
+    await student.save();
+
+    res.json({
+      success: true,
       message: 'Student marked as leaving school successfully',
       data: {
         id: student._id,
         name: student.name,
-        leftSchool: student.leftSchool,
-        leftSchoolBy: teacher._id
+        status: student.status,
+        leftSchool: student.leftSchool
       }
     });
   } catch (error) {
-    console.error('Error marking student as leaving:', error);
+    console.error('Error in legacy leave-school endpoint:', error);
     res.status(500).json({ 
       success: false,
       message: 'Server error',
