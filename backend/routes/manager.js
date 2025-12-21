@@ -1409,5 +1409,86 @@ router.post('/notices', async (req, res) => {
   }
 });
 
+// Get drivers with their routes and students (Kids view)
+router.get('/kids', async (req, res) => {
+  try {
+    const schoolId = req.user.sid;
+
+    // Get all active drivers for this school
+    const drivers = await Driver.find({ 
+      sid: schoolId,
+      status: { $ne: 'Deleted' }
+    })
+      .select('-password')
+      .sort({ name: 1 });
+
+    // Get all routes for this school
+    const routes = await Route.find({
+      sid: schoolId,
+      isdeleted: false
+    })
+      .populate({
+        path: 'students',
+        select: 'name photo grade address status',
+        match: { isdelete: false }
+      })
+      .populate('driver', 'name email phone vehicleNumber')
+      .sort({ name: 1 });
+
+    // Group routes by driver
+    const driversData = drivers.map(driver => {
+      const driverRoutes = routes
+        .filter(route => route.driver && route.driver._id.toString() === driver._id.toString())
+        .map(route => ({
+          id: route._id,
+          name: route.name,
+          students: route.students.filter(student => student !== null).map(student => ({
+            id: student._id,
+            name: student.name,
+            photo: student.photo,
+            grade: student.grade,
+            address: student.address,
+            status: student.status
+          }))
+        }));
+
+      return {
+        id: driver._id,
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone,
+        vehicleNumber: driver.vehicleNumber,
+        photo: driver.photo,
+        status: driver.status,
+        routes: driverRoutes,
+        totalStudents: driverRoutes.reduce((sum, route) => sum + route.students.length, 0)
+      };
+    });
+
+    // Also include routes without drivers
+    const routesWithoutDrivers = routes
+      .filter(route => !route.driver || !route.driver._id)
+      .map(route => ({
+        id: route._id,
+        name: route.name,
+        students: route.students.filter(student => student !== null).map(student => ({
+          id: student._id,
+          name: student.name,
+          photo: student.photo,
+          grade: student.grade,
+          address: student.address,
+          status: student.status
+        }))
+      }));
+
+    res.json({
+      drivers: driversData,
+      unassignedRoutes: routesWithoutDrivers
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
 
