@@ -10,10 +10,10 @@ router.get('/', async (req, res) => {
   try {
     let schools;
     if (req.userRole === 'admin') {
-      schools = await School.find({}).sort({ createdAt: -1 });
+      schools = await School.find({ isDeleted: false }).sort({ createdAt: -1 });
     } else if (req.userRole === 'manager') {
-      schools = await School.findById(req.user.sid);
-      schools = schools ? [schools] : [];
+      const school = await School.findOne({ _id: req.user.sid, isDeleted: false });
+      schools = school ? [school] : [];
     } else {
       return res.status(403).json({ message: 'Access denied' });
     }
@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
 // Get school by ID
 router.get('/:id', async (req, res) => {
   try {
-    const school = await School.findById(req.params.id);
+    const school = await School.findOne({ _id: req.params.id, isDeleted: false });
     if (!school) {
       return res.status(404).json({ message: 'School not found' });
     }
@@ -71,7 +71,7 @@ router.put('/:id', async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const school = await School.findById(req.params.id);
+    const school = await School.findOne({ _id: req.params.id, isDeleted: false });
     if (!school) {
       return res.status(404).json({ message: 'School not found' });
     }
@@ -95,12 +95,12 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete/Suspend school (admin only)
+// Soft delete school (admin only)
 router.delete('/:id', authorize('admin'), async (req, res) => {
   try {
     const school = await School.findByIdAndUpdate(
       req.params.id,
-      { status: 'Suspended' },
+      { isDeleted: true, updatedAt: Date.now() },
       { new: true }
     );
 
@@ -108,7 +108,7 @@ router.delete('/:id', authorize('admin'), async (req, res) => {
       return res.status(404).json({ message: 'School not found' });
     }
 
-    res.json({ message: 'School suspended successfully', school });
+    res.json({ message: 'School deleted successfully', school });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

@@ -24,7 +24,7 @@ const authenticate = async (req, res, next) => {
         user = await Admin.findById(decoded.userId).select('-password');
         break;
       case 'manager':
-        user = await Manager.findById(decoded.userId).select('-password');
+        user = await Manager.findOne({ _id: decoded.userId, isDeleted: false }).select('-password');
         break;
       case 'parent':
         user = await Parent.findById(decoded.userId).select('-password');

@@ -11,19 +11,18 @@ const defaultCenter = {
   lng: 77.1025
 }
 
-function MapComponent({ center, onLocationSelect, selectedLocation }) {
+function MapComponent({ center, zoom, onLocationSelect, selectedLocation, mapRef }) {
   const [map, setMap] = useState(null)
-  const mapRef = useRef(null)
 
-  const onLoad = useCallback((map) => {
-    mapRef.current = map
-    setMap(map)
-  }, [])
+  const onLoad = useCallback((mapInstance) => {
+    mapRef.current = mapInstance
+    setMap(mapInstance)
+  }, [mapRef])
 
   const onUnmount = useCallback(() => {
     mapRef.current = null
     setMap(null)
-  }, [])
+  }, [mapRef])
 
   const onMapClick = useCallback((event) => {
     const lat = event.latLng.lat()
@@ -31,11 +30,20 @@ function MapComponent({ center, onLocationSelect, selectedLocation }) {
     onLocationSelect(lat, lng)
   }, [onLocationSelect])
 
+  useEffect(() => {
+    if (map && center) {
+      map.setCenter(center)
+      if (zoom) {
+        map.setZoom(zoom)
+      }
+    }
+  }, [map, center, zoom])
+
   return (
     <GoogleMap
       mapContainerStyle={containerStyle}
       center={center || defaultCenter}
-      zoom={13}
+      zoom={zoom || 13}
       onLoad={onLoad}
       onUnmount={onUnmount}
       onClick={onMapClick}
@@ -60,6 +68,11 @@ function MapComponent({ center, onLocationSelect, selectedLocation }) {
 const MapPicker = ({ latitude, longitude, onLocationChange, height = '400px' }) => {
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [mapCenter, setMapCenter] = useState(defaultCenter)
+  const [mapZoom, setMapZoom] = useState(13)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef(null)
+  const autocompleteRef = useRef(null)
+  const mapRef = useRef(null)
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
@@ -85,10 +98,57 @@ const MapPicker = ({ latitude, longitude, onLocationChange, height = '400px' }) 
     setSelectedLocation(null)
   }, [latitude, longitude])
 
+  // Initialize Google Places Autocomplete
+  useEffect(() => {
+    if (isLoaded && searchInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(
+        searchInputRef.current,
+        {
+          types: ['establishment', 'geocode'],
+          fields: ['geometry', 'name', 'formatted_address']
+        }
+      )
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace()
+        if (place.geometry && place.geometry.location) {
+          const lat = place.geometry.location.lat()
+          const lng = place.geometry.location.lng()
+          const location = { lat, lng }
+          
+          setSelectedLocation(location)
+          setMapCenter(location)
+          setMapZoom(16) // Zoom in when a place is selected
+          onLocationChange(lat, lng)
+          setSearchQuery(place.formatted_address || place.name || '')
+        }
+      })
+
+      autocompleteRef.current = autocomplete
+
+      return () => {
+        if (autocompleteRef.current) {
+          window.google.maps.event.clearInstanceListeners(autocompleteRef.current)
+        }
+      }
+    }
+  }, [isLoaded, onLocationChange])
+
   const handleLocationSelect = (lat, lng) => {
     const location = { lat, lng }
     setSelectedLocation(location)
+    setMapCenter(location)
     onLocationChange(lat, lng)
+    
+    // Reverse geocode to get address
+    if (window.google && window.google.maps) {
+      const geocoder = new window.google.maps.Geocoder()
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          setSearchQuery(results[0].formatted_address)
+        }
+      })
+    }
   }
 
   if (loadError) {
@@ -123,11 +183,29 @@ const MapPicker = ({ latitude, longitude, onLocationChange, height = '400px' }) 
 
   return (
     <div className="w-full">
+      <div className="mb-3">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Search Location
+        </label>
+        <input
+          ref={searchInputRef}
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Enter place name or address"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Type to search for a place, then select from suggestions or click on the map
+        </p>
+      </div>
       <div style={{ height, width: '100%' }} className="rounded-lg overflow-hidden border border-gray-300">
         <MapComponent
           center={mapCenter}
+          zoom={mapZoom}
           onLocationSelect={handleLocationSelect}
           selectedLocation={selectedLocation}
+          mapRef={mapRef}
         />
       </div>
       <p className="text-sm text-gray-600 mt-2">

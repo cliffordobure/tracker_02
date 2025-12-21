@@ -30,7 +30,12 @@ const managerSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
+    required: true,
     trim: true
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
   },
   permissions: [{
     type: String,

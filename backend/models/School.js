@@ -24,7 +24,12 @@ const schoolSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
+    required: true,
     trim: true
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
   },
   email: {
     type: String,

@@ -32,6 +32,11 @@ const Schools = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
+    if (!formData.phone || formData.phone.trim() === '') {
+      toast.error('Phone number is required')
+      return
+    }
+    
     // Validate location is selected (optional validation - remove if location is not required)
     // if (!formData.latitude || !formData.longitude) {
     //   toast.error('Please select a location on the map')
@@ -84,15 +89,27 @@ const Schools = () => {
     setShowModal(true)
   }
 
-  const handleDelete = async (id) => {
+  const handleSuspend = async (id) => {
     if (!window.confirm('Are you sure you want to suspend this school?')) return
     
     try {
-      await dispatch(deleteSchool(id)).unwrap()
+      await dispatch(updateSchool({ id, schoolData: { status: 'Suspended' } })).unwrap()
       toast.success('School suspended successfully!')
       dispatch(fetchSchools())
     } catch (error) {
       toast.error(error || 'Failed to suspend school')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this school? This action cannot be undone.')) return
+    
+    try {
+      await dispatch(deleteSchool(id)).unwrap()
+      toast.success('School deleted successfully!')
+      dispatch(fetchSchools())
+    } catch (error) {
+      toast.error(error || 'Failed to delete school')
     }
   }
 
@@ -153,12 +170,15 @@ const Schools = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Delete
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {schools.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
                         No schools found. Create your first school!
                       </td>
                     </tr>
@@ -195,10 +215,18 @@ const Schools = () => {
                             Edit
                           </button>
                           <button
+                            onClick={() => handleSuspend(school._id)}
+                            className="text-orange-600 hover:text-orange-900"
+                          >
+                            {school.status === 'Active' ? 'Suspend' : 'Activate'}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
                             onClick={() => handleDelete(school._id)}
                             className="text-red-600 hover:text-red-900"
                           >
-                            {school.status === 'Active' ? 'Suspend' : 'Activate'}
+                            Delete
                           </button>
                         </td>
                       </tr>
@@ -279,10 +307,11 @@ const Schools = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone
+                      Phone *
                     </label>
                     <input
                       type="tel"
+                      required
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       className="input"

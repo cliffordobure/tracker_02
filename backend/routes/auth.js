@@ -98,7 +98,7 @@ router.post('/manager/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const manager = await Manager.findOne({ email }).populate('sid');
+    const manager = await Manager.findOne({ email, isDeleted: false }).populate('sid');
     if (!manager) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }

@@ -39,6 +39,10 @@ const Managers = () => {
       if (editingManager && !data.password) {
         delete data.password
       }
+      if (!data.phone || data.phone.trim() === '') {
+        toast.error('Phone number is required')
+        return
+      }
 
       if (editingManager) {
         await dispatch(updateManager({ id: editingManager._id, managerData: data })).unwrap()
@@ -70,15 +74,27 @@ const Managers = () => {
     setShowModal(true)
   }
 
-  const handleDelete = async (id) => {
+  const handleSuspend = async (id) => {
     if (!window.confirm('Are you sure you want to suspend this manager?')) return
     
     try {
-      await dispatch(deleteManager(id)).unwrap()
+      await dispatch(updateManager({ id, managerData: { status: 'Suspended' } })).unwrap()
       toast.success('Manager suspended successfully!')
       dispatch(fetchManagers())
     } catch (error) {
       toast.error(error || 'Failed to suspend manager')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this manager? This action cannot be undone.')) return
+    
+    try {
+      await dispatch(deleteManager(id)).unwrap()
+      toast.success('Manager deleted successfully!')
+      dispatch(fetchManagers())
+    } catch (error) {
+      toast.error(error || 'Failed to delete manager')
     }
   }
 
@@ -142,12 +158,13 @@ const Managers = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Delete</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {managers.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                         No managers found. Create your first manager!
                       </td>
                     </tr>
@@ -184,10 +201,18 @@ const Managers = () => {
                             Edit
                           </button>
                           <button
+                            onClick={() => handleSuspend(manager._id)}
+                            className="text-orange-600 hover:text-orange-900"
+                          >
+                            {manager.status === 'Active' ? 'Suspend' : 'Activate'}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
                             onClick={() => handleDelete(manager._id)}
                             className="text-red-600 hover:text-red-900"
                           >
-                            {manager.status === 'Active' ? 'Suspend' : 'Activate'}
+                            Delete
                           </button>
                         </td>
                       </tr>
@@ -258,9 +283,10 @@ const Managers = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
                     <input
                       type="tel"
+                      required
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       className="input"
