@@ -668,8 +668,12 @@ router.get('/diary/:entryId', async (req, res) => {
 router.post('/diary/:entryId/sign', async (req, res) => {
   try {
     const { entryId } = req.params;
-    const { signature, parentNote } = req.body; // Base64 encoded signature image or text + optional note from parent
+    // Accept parentNote from multiple possible field names (for mobile app compatibility)
+    const { signature, parentNote, note, parent_note, noteFromParent } = req.body;
     const parent = await Parent.findById(req.user._id);
+    
+    // Use the first available note field
+    const receivedNote = parentNote || note || parent_note || noteFromParent || null;
 
     if (!signature || signature.trim() === '') {
       return res.status(400).json({ message: 'Signature is required' });
@@ -690,9 +694,16 @@ router.post('/diary/:entryId/sign', async (req, res) => {
 
     // Normalise/clean parent note (optional)
     const cleanParentNote =
-      parentNote && typeof parentNote === 'string' && parentNote.trim().length > 0
-        ? parentNote.trim()
+      receivedNote && typeof receivedNote === 'string' && receivedNote.trim().length > 0
+        ? receivedNote.trim()
         : null;
+
+    // Debug logging to see what we're receiving
+    console.log(`[Parent Sign] Entry ${entryId}:`);
+    console.log(`  - Request body keys: ${Object.keys(req.body).join(', ')}`);
+    console.log(`  - Received parentNote="${parentNote}", note="${note}", parent_note="${parent_note}", noteFromParent="${noteFromParent}"`);
+    console.log(`  - Using receivedNote="${receivedNote}" (type: ${typeof receivedNote})`);
+    console.log(`  - Cleaned note="${cleanParentNote}"`);
 
     // Update diary entry with parent signature
     entry.parentSignature = {
@@ -706,12 +717,21 @@ router.post('/diary/:entryId/sign', async (req, res) => {
     // Always set it (even if null) to ensure consistency
     entry.parentNote = cleanParentNote || null;
 
+    // Mark the nested object as modified to ensure Mongoose saves it
+    entry.markModified('parentSignature');
+    entry.markModified('parentNote');
+
     // Make teacher note visible after parent signs
     if (entry.teacherNote) {
       entry.teacherNoteVisible = true;
     }
 
+    // Save and verify
     await entry.save();
+    
+    // Reload from database to verify it was saved
+    const savedEntry = await Diary.findById(entryId);
+    console.log(`[Parent Sign] After save - Entry ${entryId}: parentNote="${savedEntry.parentNote}", parentSignature.note="${savedEntry.parentSignature?.note}"`);
 
     // Notify teacher via Socket.io and FCM
     const io = getSocketIO();
@@ -762,9 +782,11 @@ router.post('/diary/:entryId/sign', async (req, res) => {
             id: parent._id,
             name: parent.name
           },
-          signedAt: entry.parentSignature.signedAt
+          signedAt: entry.parentSignature.signedAt,
+          note: entry.parentSignature.note || null // Include note in response
         },
-        teacherNoteVisible: entry.teacherNoteVisible // NEW FIELD
+        parentNote: entry.parentNote || null, // Include root level note in response
+        teacherNoteVisible: entry.teacherNoteVisible
       }
     });
   } catch (error) {

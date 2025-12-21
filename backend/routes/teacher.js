@@ -301,9 +301,15 @@ router.get('/diary', verifyTeacher, async (req, res) => {
       const parentNoteFromRoot = entry.parentNote;
       const parentNote = parentNoteFromRoot || parentNoteFromSignature || null;
 
-      // Debug logging (can be removed in production)
+      // Detailed debug logging to see what's in the database
       if (entry.parentSignature && entry.parentSignature.signedBy) {
-        console.log(`[Teacher Diary] Entry ${entry._id}: parentNote=${entry.parentNote}, parentSignature.note=${entry.parentSignature.note}, final=${parentNote}`);
+        console.log(`[Teacher Diary] Entry ${entry._id}:`);
+        console.log(`  - entry.parentNote (raw): ${JSON.stringify(entry.parentNote)}`);
+        console.log(`  - entry.parentSignature (raw): ${JSON.stringify(entry.parentSignature)}`);
+        console.log(`  - entry.parentSignature.note: ${JSON.stringify(entry.parentSignature.note)}`);
+        console.log(`  - Final parentNote: ${JSON.stringify(parentNote)}`);
+        console.log(`  - Has parentSignature object: ${!!entry.parentSignature}`);
+        console.log(`  - parentSignature keys: ${entry.parentSignature ? Object.keys(entry.parentSignature).join(', ') : 'N/A'}`);
       }
 
       return {
