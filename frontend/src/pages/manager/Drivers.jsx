@@ -30,6 +30,11 @@ const Drivers = () => {
         delete data.password
       }
 
+      if (!data.vehicleNumber || data.vehicleNumber.trim() === '') {
+        toast.error('Vehicle number is required')
+        return
+      }
+
       if (editingDriver) {
         await dispatch(updateDriver({ id: editingDriver._id, driverData: data })).unwrap()
         toast.success('Driver updated successfully!')
@@ -316,9 +321,10 @@ const Drivers = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Vehicle Number</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Vehicle Number *</label>
                     <input
                       type="text"
+                      required
                       value={formData.vehicleNumber}
                       onChange={(e) => setFormData({ ...formData, vehicleNumber: e.target.value })}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 font-mono"

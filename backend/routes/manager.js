@@ -167,6 +167,10 @@ router.post('/drivers', async (req, res) => {
   try {
     const { name, email, password, phone, photo, licenseNumber, vehicleNumber } = req.body;
 
+    if (!vehicleNumber || vehicleNumber.trim() === '') {
+      return res.status(400).json({ message: 'Vehicle number is required' });
+    }
+
     const existingDriver = await Driver.findOne({ email });
     if (existingDriver) {
       return res.status(400).json({ message: 'Email already exists' });
@@ -218,7 +222,12 @@ router.put('/drivers/:id', async (req, res) => {
     if (phone !== undefined) driver.phone = phone;
     if (photo) driver.photo = photo;
     if (licenseNumber) driver.licenseNumber = licenseNumber;
-    if (vehicleNumber) driver.vehicleNumber = vehicleNumber;
+    if (vehicleNumber !== undefined) {
+      if (!vehicleNumber || vehicleNumber.trim() === '') {
+        return res.status(400).json({ message: 'Vehicle number is required' });
+      }
+      driver.vehicleNumber = vehicleNumber;
+    }
     if (status) driver.status = status;
     driver.updatedAt = Date.now();
 
