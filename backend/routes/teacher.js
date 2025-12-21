@@ -294,39 +294,54 @@ router.get('/diary', verifyTeacher, async (req, res) => {
 
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
 
-    const entriesData = diaryEntries.map(entry => ({
-      id: entry._id,
-      student: {
-        id: entry.studentId._id,
-        name: entry.studentId.name,
-        photo: entry.studentId.photo,
-        grade: entry.studentId.grade
-      },
-      teacher: {
-        id: teacher._id,
-        name: entry.teacherName || teacher.name
-      },
-      content: entry.content,
-      date: entry.date,
-      attachments: entry.attachments.map(att => {
-        if (att.startsWith('http://') || att.startsWith('https://')) {
-          return att;
-        }
-        return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
-      }),
-      // Only show teacherNote if teacherNoteVisible is true
-      teacherNote: entry.teacherNoteVisible ? entry.teacherNote : null,
-      teacherNoteVisible: entry.teacherNoteVisible,
-      parentSignature: entry.parentSignature ? {
-        signedBy: entry.parentSignature.signedBy,
-        signedAt: entry.parentSignature.signedAt,
-        signature: entry.parentSignature.signature,
-        note: entry.parentSignature.note || null
-      } : null,
-      // Expose parentNote at root level so mobile apps can easily show it
-      parentNote: entry.parentNote || (entry.parentSignature && entry.parentSignature.note) || null,
-      createdAt: entry.createdAt
-    }));
+    const entriesData = diaryEntries.map(entry => {
+      // Get parent note from multiple possible locations
+      // Check both root level parentNote and nested parentSignature.note
+      const parentNoteFromSignature = entry.parentSignature?.note;
+      const parentNoteFromRoot = entry.parentNote;
+      const parentNote = parentNoteFromRoot || parentNoteFromSignature || null;
+
+      // Debug logging (can be removed in production)
+      if (entry.parentSignature && entry.parentSignature.signedBy) {
+        console.log(`[Teacher Diary] Entry ${entry._id}: parentNote=${entry.parentNote}, parentSignature.note=${entry.parentSignature.note}, final=${parentNote}`);
+      }
+
+      return {
+        id: entry._id,
+        student: {
+          id: entry.studentId._id,
+          name: entry.studentId.name,
+          photo: entry.studentId.photo,
+          grade: entry.studentId.grade
+        },
+        teacher: {
+          id: teacher._id,
+          name: entry.teacherName || teacher.name
+        },
+        content: entry.content,
+        date: entry.date,
+        attachments: entry.attachments.map(att => {
+          if (att.startsWith('http://') || att.startsWith('https://')) {
+            return att;
+          }
+          return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
+        }),
+        // Only show teacherNote if teacherNoteVisible is true
+        teacherNote: entry.teacherNoteVisible ? entry.teacherNote : null,
+        teacherNoteVisible: entry.teacherNoteVisible,
+        parentSignature: entry.parentSignature ? {
+          signedBy: entry.parentSignature.signedBy,
+          signedAt: entry.parentSignature.signedAt,
+          signature: entry.parentSignature.signature,
+          note: entry.parentSignature.note || null
+        } : null,
+        // Expose parentNote at root level - check both root level and nested location
+        parentNote: parentNote,
+        // Also include as parent_note for backward compatibility with mobile apps
+        parent_note: parentNote,
+        createdAt: entry.createdAt
+      };
+    });
 
     res.json({
       success: true,

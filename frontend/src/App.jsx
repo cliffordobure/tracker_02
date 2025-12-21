@@ -9,6 +9,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import AdminRouter from './pages/admin/AdminRouter'
 import ManagerRouter from './pages/manager/ManagerRouter'
+import TeacherRouter from './pages/teacher/TeacherRouter'
 import ParentRouter from './pages/parent/ParentRouter'
 import DriverRouter from './pages/driver/DriverRouter'
 
@@ -42,6 +43,14 @@ function App() {
         element={
           <PrivateRoute allowedRoles={['manager']}>
             <ManagerRouter />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/teacher/*"
+        element={
+          <PrivateRoute allowedRoles={['teacher']}>
+            <TeacherRouter />
           </PrivateRoute>
         }
       />

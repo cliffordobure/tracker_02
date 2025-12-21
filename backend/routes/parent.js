@@ -699,13 +699,12 @@ router.post('/diary/:entryId/sign', async (req, res) => {
       signedBy: parent._id,
       signedAt: new Date(),
       signature: signature,
-      note: cleanParentNote
+      note: cleanParentNote || null // Explicitly set to null if empty
     };
 
     // Store a copy of the note at root level for easier access in mobile/web apps
-    if (cleanParentNote) {
-      entry.parentNote = cleanParentNote;
-    }
+    // Always set it (even if null) to ensure consistency
+    entry.parentNote = cleanParentNote || null;
 
     // Make teacher note visible after parent signs
     if (entry.teacherNote) {
