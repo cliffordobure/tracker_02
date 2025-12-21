@@ -10,9 +10,9 @@ router.get('/', async (req, res) => {
   try {
     let schools;
     if (req.userRole === 'admin') {
-      schools = await School.find({ isDeleted: false }).sort({ createdAt: -1 });
+      schools = await School.find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 });
     } else if (req.userRole === 'manager') {
-      const school = await School.findOne({ _id: req.user.sid, isDeleted: false });
+      const school = await School.findOne({ _id: req.user.sid, isDeleted: { $ne: true } });
       schools = school ? [school] : [];
     } else {
       return res.status(403).json({ message: 'Access denied' });
@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
 // Get school by ID
 router.get('/:id', async (req, res) => {
   try {
-    const school = await School.findOne({ _id: req.params.id, isDeleted: false });
+    const school = await School.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!school) {
       return res.status(404).json({ message: 'School not found' });
     }
@@ -71,7 +71,7 @@ router.put('/:id', async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const school = await School.findOne({ _id: req.params.id, isDeleted: false });
+    const school = await School.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!school) {
       return res.status(404).json({ message: 'School not found' });
     }

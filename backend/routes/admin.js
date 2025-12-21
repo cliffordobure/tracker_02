@@ -134,7 +134,7 @@ router.put('/profile', async (req, res) => {
 // Get all managers
 router.get('/managers', async (req, res) => {
   try {
-    const managers = await Manager.find({ isDeleted: false })
+    const managers = await Manager.find({ isDeleted: { $ne: true } })
       .select('-password')
       .populate('sid', 'name')
       .sort({ createdAt: -1 });
@@ -149,7 +149,7 @@ router.post('/managers', async (req, res) => {
   try {
     const { name, email, password, sid, phone, image, permissions, isStaff } = req.body;
 
-    const existingManager = await Manager.findOne({ email, isDeleted: false });
+    const existingManager = await Manager.findOne({ email, isDeleted: { $ne: true } });
     if (existingManager) {
       return res.status(400).json({ message: 'Email already exists' });
     }
@@ -181,13 +181,13 @@ router.put('/managers/:id', async (req, res) => {
   try {
     const { name, email, sid, phone, image, permissions, isStaff, status } = req.body;
 
-    const manager = await Manager.findOne({ _id: req.params.id, isDeleted: false });
+    const manager = await Manager.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!manager) {
       return res.status(404).json({ message: 'Manager not found' });
     }
 
     if (email && email !== manager.email) {
-      const existingManager = await Manager.findOne({ email, isDeleted: false });
+      const existingManager = await Manager.findOne({ email, isDeleted: { $ne: true } });
       if (existingManager) {
         return res.status(400).json({ message: 'Email already exists' });
       }
@@ -245,7 +245,7 @@ router.post('/notices', async (req, res) => {
       });
     }
 
-    const school = await School.findOne({ _id: sid, isDeleted: false });
+    const school = await School.findOne({ _id: sid, isDeleted: { $ne: true } });
     if (!school) {
       return res.status(404).json({
         message: 'School not found',
@@ -339,11 +339,11 @@ router.get('/staff', async (req, res) => {
 // Get reports data
 router.get('/reports', async (req, res) => {
   try {
-    const schools = await School.find({ isDeleted: false })
+    const schools = await School.find({ isDeleted: { $ne: true } })
       .select('name city status')
       .sort({ name: 1 });
     
-    const managers = await Manager.find({ isDeleted: false })
+    const managers = await Manager.find({ isDeleted: { $ne: true } })
       .select('-password')
       .populate('sid', 'name')
       .sort({ createdAt: -1 });
