@@ -1103,4 +1103,44 @@ router.get('/journey/history', async (req, res) => {
   }
 });
 
+// ==================== DRIVER MESSAGING ENDPOINTS ====================
+// IMPORTANT: Route order is critical! Specific routes MUST come before parameterized routes.
+// Express matches routes in order, so /messages/:id would match /messages/inbox if defined first.
+
+const {
+  getInbox,
+  sendMessage,
+  getMessage,
+  markAsRead,
+  markAllAsRead,
+  replyToMessage,
+  getOutbox
+} = require('../controllers/driverMessageController');
+
+// Route logging middleware for debugging
+const logRoute = (method, path, emoji = '📥') => {
+  return (req, res, next) => {
+    if (method === 'POST') {
+      console.log(`📤 ${method} ${path} route hit`);
+    } else {
+      console.log(`${emoji} ${method} ${path} route hit`);
+    }
+    next();
+  };
+};
+
+// Specific routes first (must come before parameterized routes)
+router.get('/messages/inbox', logRoute('GET', '/messages/inbox'), getInbox);
+router.get('/messages/outbox', logRoute('GET', '/messages/outbox'), getOutbox);
+router.put('/messages/read-all', logRoute('PUT', '/messages/read-all'), markAllAsRead);
+
+// Parameterized routes (must come after specific routes)
+router.put('/messages/:id/read', logRoute('PUT', '/messages/:id/read'), markAsRead);
+router.post('/messages/:id/reply', logRoute('POST', '/messages/:id/reply'), replyToMessage);
+router.get('/messages/:id', logRoute('GET', '/messages/:id'), getMessage);
+
+// General routes last (must come after all specific and parameterized routes)
+router.get('/messages', logRoute('GET', '/messages'), getInbox); // GET inbox (default)
+router.post('/messages', logRoute('POST', '/messages'), sendMessage); // POST send message
+
 module.exports = router;
