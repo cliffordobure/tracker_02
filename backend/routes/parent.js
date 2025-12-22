@@ -106,33 +106,108 @@ router.get('/students', async (req, res) => {
       ]
     });
     
-    const studentsData = parent.students.map(student => ({
-      id: student._id,
-      name: student.name,
-      photo: student.photo,
-      grade: student.grade,
-      address: student.address,
-      latitude: student.latitude,
-      longitude: student.longitude,
-      pickup: student.pickup,
-      dropped: student.dropped,
-      status: student.status,
-      route: student.route ? {
-        id: student.route._id,
-        name: student.route.name,
-        driver: student.route.driver ? {
-          id: student.route.driver._id,
-          name: student.route.driver.name,
-          phone: student.route.driver.phone,
-          photo: student.route.driver.photo,
-          vehicleNumber: student.route.driver.vehicleNumber,
-          location: {
-            latitude: student.route.driver.latitude,
-            longitude: student.route.driver.longitude
+    // Process each student to find driver and teacher
+    const studentsData = await Promise.all(parent.students.map(async (student) => {
+      let driver = null;
+      let teacher = null;
+
+      // Find driver: First try to match by route, then fallback to any active driver for school
+      if (student.route) {
+        // Try to find driver where currentRoute matches student's route
+        driver = await Driver.findOne({
+          currentRoute: student.route._id,
+          sid: student.sid,
+          status: 'Active'
+        }).select('_id name vehicleNumber');
+
+        // If no driver found via route, fallback to any active driver for the school
+        if (!driver) {
+          driver = await Driver.findOne({
+            sid: student.sid,
+            status: 'Active'
+          }).select('_id name vehicleNumber');
+        }
+      } else {
+        // If student has no route, try to find any active driver for the school
+        driver = await Driver.findOne({
+          sid: student.sid,
+          status: 'Active'
+        }).select('_id name vehicleNumber');
+      }
+
+      // Find teacher: Match student's grade with teacher's assigned class
+      if (student.grade && student.sid) {
+        const studentGrade = (student.grade || '').trim().toLowerCase();
+        
+        // Find all active teachers for this school
+        const teachers = await Staff.find({
+          sid: student.sid,
+          role: 'teacher',
+          status: 'Active',
+          isdelete: false
+        }).select('_id name assignedClass assignedClasses');
+
+        // Find teacher with matching assignedClass or assignedClasses
+        for (const t of teachers) {
+          // Check assignedClass (backward compatibility)
+          if (t.assignedClass) {
+            const teacherClass = (t.assignedClass || '').trim().toLowerCase();
+            if (teacherClass === studentGrade) {
+              teacher = t;
+              break;
+            }
           }
-        } : null,
-        stops: student.route.stops || []
-      } : null
+          
+          // Check assignedClasses array
+          if (t.assignedClasses && Array.isArray(t.assignedClasses) && t.assignedClasses.length > 0) {
+            const matches = t.assignedClasses.some(cls => {
+              const normalizedClass = (cls || '').trim().toLowerCase();
+              return normalizedClass === studentGrade;
+            });
+            if (matches) {
+              teacher = t;
+              break;
+            }
+          }
+        }
+      }
+
+      return {
+        id: student._id,
+        name: student.name,
+        photo: student.photo,
+        grade: student.grade,
+        address: student.address,
+        latitude: student.latitude,
+        longitude: student.longitude,
+        pickup: student.pickup,
+        dropped: student.dropped,
+        status: student.status,
+        // Driver info at student level (for mobile app compatibility)
+        driverId: driver ? driver._id.toString() : null,
+        driverName: driver ? driver.name : null,
+        vehicleNumber: driver ? driver.vehicleNumber : null,
+        // Teacher info at student level (for mobile app compatibility)
+        teacherId: teacher ? teacher._id.toString() : null,
+        teacherName: teacher ? teacher.name : null,
+        // Route info (kept for backward compatibility)
+        route: student.route ? {
+          id: student.route._id,
+          name: student.route.name,
+          driver: student.route.driver ? {
+            id: student.route.driver._id,
+            name: student.route.driver.name,
+            phone: student.route.driver.phone,
+            photo: student.route.driver.photo,
+            vehicleNumber: student.route.driver.vehicleNumber,
+            location: {
+              latitude: student.route.driver.latitude,
+              longitude: student.route.driver.longitude
+            }
+          } : null,
+          stops: student.route.stops || []
+        } : null
+      };
     }));
 
     res.json({
@@ -140,6 +215,7 @@ router.get('/students', async (req, res) => {
       data: studentsData
     });
   } catch (error) {
+    console.error('Error fetching parent students:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
