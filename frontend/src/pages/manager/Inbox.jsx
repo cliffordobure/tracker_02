@@ -8,10 +8,26 @@ const Inbox = () => {
   const [loading, setLoading] = useState(true)
   const [selectedMessage, setSelectedMessage] = useState(null)
   const [filterType, setFilterType] = useState('all') // all, parent, driver
+  const [showComposeModal, setShowComposeModal] = useState(false)
+  const [parents, setParents] = useState([])
+  const [drivers, setDrivers] = useState([])
+  const [students, setStudents] = useState([])
+  const [composeData, setComposeData] = useState({
+    toType: 'parent',
+    toId: '',
+    studentId: '',
+    subject: '',
+    message: ''
+  })
 
   useEffect(() => {
     fetchMessages()
-  }, [filterType])
+    if (showComposeModal) {
+      fetchParents()
+      fetchDrivers()
+      fetchStudents()
+    }
+  }, [filterType, showComposeModal])
 
   const fetchMessages = async () => {
     try {
@@ -37,6 +53,33 @@ const Inbox = () => {
     }
   }
 
+  const fetchParents = async () => {
+    try {
+      const response = await api.get('/manager/parents')
+      setParents(response.data || [])
+    } catch (error) {
+      console.error('Failed to fetch parents:', error)
+    }
+  }
+
+  const fetchDrivers = async () => {
+    try {
+      const response = await api.get('/manager/drivers')
+      setDrivers(response.data || [])
+    } catch (error) {
+      console.error('Failed to fetch drivers:', error)
+    }
+  }
+
+  const fetchStudents = async () => {
+    try {
+      const response = await api.get('/manager/students')
+      setStudents(response.data || [])
+    } catch (error) {
+      console.error('Failed to fetch students:', error)
+    }
+  }
+
   const handleReply = async (messageId, replyText) => {
     try {
       await api.post(`/manager/messages/${messageId}/reply`, { message: replyText })
@@ -45,6 +88,30 @@ const Inbox = () => {
       fetchMessages()
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to send reply')
+    }
+  }
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault()
+    if (!composeData.toId || !composeData.message.trim()) {
+      toast.error('Please select a recipient and enter a message')
+      return
+    }
+
+    try {
+      await api.post('/manager/messages', composeData)
+      toast.success('Message sent successfully!')
+      setShowComposeModal(false)
+      setComposeData({
+        toType: 'parent',
+        toId: '',
+        studentId: '',
+        subject: '',
+        message: ''
+      })
+      fetchMessages()
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to send message')
     }
   }
 
@@ -62,15 +129,26 @@ const Inbox = () => {
                   Messages received from parents and drivers
                 </p>
               </div>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="mt-4 sm:mt-0 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">All Messages</option>
-                <option value="parent">From Parents</option>
-                <option value="driver">From Drivers</option>
-              </select>
+              <div className="flex flex-col sm:flex-row gap-3 mt-4 sm:mt-0">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="all">All Messages</option>
+                  <option value="parent">From Parents</option>
+                  <option value="driver">From Drivers</option>
+                </select>
+                <button
+                  onClick={() => setShowComposeModal(true)}
+                  className="px-6 py-2 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:from-primary-700 hover:to-primary-800 transition-colors font-semibold flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Compose
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -194,6 +272,148 @@ const Inbox = () => {
           )}
         </div>
       </div>
+
+      {/* Compose Message Modal */}
+      {showComposeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900">Compose Message</h2>
+                <button
+                  onClick={() => {
+                    setShowComposeModal(false)
+                    setComposeData({
+                      toType: 'parent',
+                      toId: '',
+                      studentId: '',
+                      subject: '',
+                      message: ''
+                    })
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <form onSubmit={handleSendMessage} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Send To</label>
+                <select
+                  value={composeData.toType}
+                  onChange={(e) => {
+                    setComposeData({ ...composeData, toType: e.target.value, toId: '', studentId: '' })
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  <option value="parent">Parent</option>
+                  <option value="driver">Driver</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select {composeData.toType === 'parent' ? 'Parent' : 'Driver'}
+                </label>
+                <select
+                  value={composeData.toId}
+                  onChange={(e) => setComposeData({ ...composeData, toId: e.target.value, studentId: '' })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  <option value="">Select {composeData.toType === 'parent' ? 'Parent' : 'Driver'}...</option>
+                  {(composeData.toType === 'parent' ? parents : drivers).map((item) => (
+                    <option key={item._id} value={item._id}>
+                      {item.name} {item.email ? `(${item.email})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {composeData.toType === 'parent' && composeData.toId && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Related Student (Optional)</label>
+                  <select
+                    value={composeData.studentId}
+                    onChange={(e) => setComposeData({ ...composeData, studentId: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Select Student (Optional)...</option>
+                    {(() => {
+                      const selectedParent = parents.find(p => p._id === composeData.toId)
+                      if (!selectedParent || !selectedParent.students) return null
+                      
+                      const parentStudentIds = selectedParent.students.map(s => 
+                        typeof s === 'object' ? s._id?.toString() || s.toString() : s.toString()
+                      )
+                      
+                      return students
+                        .filter(student => parentStudentIds.includes(student._id.toString()))
+                        .map((student) => (
+                          <option key={student._id} value={student._id}>
+                            {student.name} - {student.grade}
+                          </option>
+                        ))
+                    })()}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Subject (Optional)</label>
+                <input
+                  type="text"
+                  value={composeData.subject}
+                  onChange={(e) => setComposeData({ ...composeData, subject: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Message subject..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Message *</label>
+                <textarea
+                  value={composeData.message}
+                  onChange={(e) => setComposeData({ ...composeData, message: e.target.value })}
+                  rows="6"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Type your message here..."
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowComposeModal(false)
+                    setComposeData({
+                      toType: 'parent',
+                      toId: '',
+                      studentId: '',
+                      subject: '',
+                      message: ''
+                    })
+                  }}
+                  className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:from-primary-700 hover:to-primary-800 transition-colors font-semibold"
+                >
+                  Send Message
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </ManagerLayout>
   )
 }
