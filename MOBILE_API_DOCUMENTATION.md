@@ -2,6 +2,8 @@
 
 This document describes all the APIs available for the Parent and Driver mobile applications.
 
+> **📌 NEW ENDPOINTS:** See `NEW_ENDPOINTS_MOBILE_APP.md` for recently added endpoints including admin messaging, manager parent management, driver speed, and student photos.
+
 ## Base URL
 ```
 http://your-server-domain:5000/api

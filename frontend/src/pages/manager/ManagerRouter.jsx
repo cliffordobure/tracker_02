@@ -10,6 +10,8 @@ import DriverRatings from './DriverRatings'
 import Reports from './Reports'
 import Notices from './Notices'
 import Kids from './Kids'
+import Inbox from './Inbox'
+import Outbox from './Outbox'
 
 const ManagerRouter = () => {
   return (
@@ -25,6 +27,8 @@ const ManagerRouter = () => {
       <Route path="/notices" element={<Notices />} />
       <Route path="/reports" element={<Reports />} />
       <Route path="/kids" element={<Kids />} />
+      <Route path="/inbox" element={<Inbox />} />
+      <Route path="/outbox" element={<Outbox />} />
       <Route path="*" element={<Navigate to="/manager" replace />} />
     </Routes>
   )

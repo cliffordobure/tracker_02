@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 import { fetchDashboardStats } from '../../store/slices/managerSlice'
 import { fetchDrivers } from '../../store/slices/managerDriversSlice'
 import ManagerLayout from '../../components/layouts/ManagerLayout'
 import BusTrackingMap from '../../components/BusTrackingMap'
+import api from '../../services/api'
 
 // Animated number counter component
 const AnimatedNumber = ({ value, duration = 1000 }) => {
@@ -35,23 +37,37 @@ const AnimatedNumber = ({ value, duration = 1000 }) => {
 
 const Dashboard = () => {
   const dispatch = useDispatch()
+  const navigate = useNavigate()
   const { dashboardStats, loading } = useSelector((state) => state.manager)
   const { drivers, loading: driversLoading } = useSelector((state) => state.managerDrivers)
   const { user } = useSelector((state) => state.auth)
   const [activeTab, setActiveTab] = useState('overview')
+  const [unreadMessages, setUnreadMessages] = useState(0)
 
   useEffect(() => {
     dispatch(fetchDashboardStats())
     // Fetch drivers immediately on mount
     dispatch(fetchDrivers())
+    fetchUnreadMessages()
     
     // Refresh drivers every 5 seconds to catch new trips and updates (more frequent)
     const interval = setInterval(() => {
       dispatch(fetchDrivers())
+      fetchUnreadMessages()
     }, 5000)
     
     return () => clearInterval(interval)
   }, [dispatch])
+
+  const fetchUnreadMessages = async () => {
+    try {
+      const response = await api.get('/manager/messages/inbox')
+      const unread = (response.data || []).filter(m => !m.isRead).length
+      setUnreadMessages(unread)
+    } catch (error) {
+      console.error('Failed to fetch unread messages:', error)
+    }
+  }
 
   const stats = [
     { 
@@ -221,9 +237,45 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                  {/* System Status */}
+                  {/* Messaging Widget */}
                   <div 
                     style={{ animationDelay: '700ms' }}
+                    className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-gray-100 animate-slide-up cursor-pointer hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                    onClick={() => navigate('/manager/inbox')}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold text-gray-900 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        Messages
+                      </h3>
+                      {unreadMessages > 0 && (
+                        <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">
+                          {unreadMessages} new
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Unread messages</p>
+                        <p className="text-2xl font-bold text-primary-600">{unreadMessages}</p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate('/manager/inbox')
+                        }}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-semibold"
+                      >
+                        View Inbox
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* System Status */}
+                  <div 
+                    style={{ animationDelay: '800ms' }}
                     className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-8 border border-gray-100 animate-slide-up"
                   >
                     <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
