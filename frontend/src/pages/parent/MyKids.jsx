@@ -54,7 +54,20 @@ const MyKids = () => {
               >
                 {/* Student Header */}
                 <div className="flex items-center space-x-4 mb-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-2xl">
+                  {student.photo ? (
+                    <img 
+                      src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                      alt={student.name}
+                      className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                      onError={(e) => {
+                        e.target.style.display = 'none'
+                        e.target.nextSibling.style.display = 'flex'
+                      }}
+                    />
+                  ) : null}
+                  <div 
+                    className={`w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-2xl ${student.photo ? 'hidden' : ''}`}
+                  >
                     {student.name?.charAt(0)?.toUpperCase() || 'S'}
                   </div>
                   <div className="flex-1">

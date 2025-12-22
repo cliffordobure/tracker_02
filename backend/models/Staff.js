@@ -41,9 +41,13 @@ const staffSchema = new mongoose.Schema({
     default: 'staff'
   },
   assignedClass: {
-    type: String, // e.g., 'PP1', 'PP2', 'Grade 1', etc.
+    type: String, // e.g., 'PP1', 'PP2', 'Grade 1', etc. (kept for backward compatibility)
     trim: true
   },
+  assignedClasses: [{
+    type: String, // Array of classes e.g., ['PP1', 'PP2', 'Grade 1']
+    trim: true
+  }],
   phone: {
     type: String,
     trim: true

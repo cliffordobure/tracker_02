@@ -9,12 +9,13 @@ const Teachers = () => {
   const { teachers, loading } = useSelector((state) => state.managerTeachers)
   const [showModal, setShowModal] = useState(false)
   const [editingTeacher, setEditingTeacher] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     phone: '',
-    assignedClass: '',
+    assignedClasses: [],
     permissions: []
   })
 
@@ -70,7 +71,7 @@ const Teachers = () => {
       email: teacher.email || '',
       password: '',
       phone: teacher.phone || '',
-      assignedClass: teacher.assignedClass || '',
+      assignedClasses: teacher.assignedClasses || (teacher.assignedClass ? [teacher.assignedClass] : []),
       permissions: teacher.permissions || []
     })
     setShowModal(true)
@@ -103,11 +104,29 @@ const Teachers = () => {
       email: '',
       password: '',
       phone: '',
-      assignedClass: '',
+      assignedClasses: [],
       permissions: []
     })
     setEditingTeacher(null)
   }
+
+  const toggleClass = (className) => {
+    const classes = formData.assignedClasses.includes(className)
+      ? formData.assignedClasses.filter(c => c !== className)
+      : [...formData.assignedClasses, className]
+    setFormData({ ...formData, assignedClasses: classes })
+  }
+
+  const filteredTeachers = teachers.filter((teacher) => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      teacher.name?.toLowerCase().includes(searchLower) ||
+      teacher.email?.toLowerCase().includes(searchLower) ||
+      teacher.phone?.toLowerCase().includes(searchLower) ||
+      teacher.assignedClass?.toLowerCase().includes(searchLower) ||
+      (teacher.assignedClasses && teacher.assignedClasses.some(cls => cls.toLowerCase().includes(searchLower)))
+    )
+  })
 
   return (
     <ManagerLayout>
@@ -124,18 +143,37 @@ const Teachers = () => {
                   Manage school staff and teachers
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  resetForm()
-                  setShowModal(true)
-                }}
-                className="mt-4 sm:mt-0 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Add Staff</span>
-              </button>
+              <div className="flex items-center space-x-4 mt-4 sm:mt-0">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search staff..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <svg
+                    className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <button
+                  onClick={() => {
+                    resetForm()
+                    setShowModal(true)
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Staff</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -151,15 +189,19 @@ const Teachers = () => {
           </div>
         ) : (
           <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
-            {teachers.length === 0 ? (
+            {filteredTeachers.length === 0 ? (
               <div className="text-center py-16 px-6">
                 <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No staff members yet</h3>
-                <p className="text-gray-600 mb-6">Get started by adding your first staff member</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  {searchTerm ? 'No staff match your search' : 'No staff members yet'}
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {searchTerm ? 'Try a different search term' : 'Get started by adding your first staff member'}
+                </p>
                 <button
                   onClick={() => {
                     resetForm()
@@ -178,13 +220,13 @@ const Teachers = () => {
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Name</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Email</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Phone</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Assigned Class</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Assigned Classes</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                       <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {teachers.map((teacher, index) => (
+                    {filteredTeachers.map((teacher, index) => (
                       <tr 
                         key={teacher._id} 
                         style={{ animationDelay: `${index * 50}ms` }}
@@ -210,8 +252,16 @@ const Teachers = () => {
                             <span className="text-sm text-gray-400">-</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {teacher.assignedClass ? (
+                        <td className="px-6 py-4">
+                          {teacher.assignedClasses && teacher.assignedClasses.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {teacher.assignedClasses.map((cls, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-purple-50 text-purple-700 rounded-lg text-xs font-medium">
+                                  {cls}
+                                </span>
+                              ))}
+                            </div>
+                          ) : teacher.assignedClass ? (
                             <span className="px-3 py-1 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium">
                               {teacher.assignedClass}
                             </span>
@@ -335,18 +385,38 @@ const Teachers = () => {
                         placeholder="Enter phone number"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Assigned Class</label>
-                      <select
-                        value={formData.assignedClass}
-                        onChange={(e) => setFormData({ ...formData, assignedClass: e.target.value })}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 bg-white"
-                      >
-                        <option value="">Select a class</option>
-                        {classOptions.map((cls) => (
-                          <option key={cls} value={cls}>{cls}</option>
-                        ))}
-                      </select>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Assigned Classes (Select Multiple)</label>
+                      <div className="border-2 border-gray-200 rounded-xl p-4 bg-gray-50 max-h-48 overflow-y-auto">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {classOptions.map((cls) => (
+                            <label 
+                              key={cls} 
+                              className="flex items-center space-x-2 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.assignedClasses.includes(cls)}
+                                onChange={() => toggleClass(cls)}
+                                className="rounded"
+                              />
+                              <span className="text-sm text-gray-700">{cls}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {formData.assignedClasses.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-xs text-gray-600 mb-2">Selected classes:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {formData.assignedClasses.map((cls) => (
+                                <span key={cls} className="px-2 py-1 bg-primary-100 text-primary-700 rounded-lg text-xs font-medium">
+                                  {cls}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div>

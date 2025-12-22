@@ -635,5 +635,123 @@ router.put('/drivers/:id/status', async (req, res) => {
 // Note: Admin now has full access to manage parents and students
 // Detailed student and parent management is also handled by individual school managers
 
+// Get inbox messages (messages TO admin)
+router.get('/messages/inbox', async (req, res) => {
+  try {
+    const Message = require('../models/Message');
+    const { fromType } = req.query;
+    
+    const query = {
+      to: 'admin',
+      toId: req.user._id,
+      isdelete: false
+    };
+    
+    if (fromType && fromType !== 'all') {
+      query.from = fromType;
+    }
+    
+    const messages = await Message.find(query)
+      .populate('fromId', 'name email')
+      .populate('toId', 'name email')
+      .populate('studentId', 'name')
+      .sort({ createdAt: -1 });
+    
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get outbox messages (messages FROM admin)
+router.get('/messages/outbox', async (req, res) => {
+  try {
+    const Message = require('../models/Message');
+    const { toType } = req.query;
+    
+    const query = {
+      from: 'admin',
+      fromId: req.user._id,
+      isdelete: false
+    };
+    
+    if (toType && toType !== 'all') {
+      query.to = toType;
+    }
+    
+    const messages = await Message.find(query)
+      .populate('fromId', 'name email')
+      .populate('toId', 'name email')
+      .populate('studentId', 'name')
+      .sort({ createdAt: -1 });
+    
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Mark message as read
+router.put('/messages/:id/read', async (req, res) => {
+  try {
+    const Message = require('../models/Message');
+    const message = await Message.findById(req.params.id);
+    
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+    
+    message.isRead = true;
+    message.readAt = new Date();
+    await message.save();
+    
+    res.json({ message: 'Message marked as read', data: message });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Reply to message
+router.post('/messages/:id/reply', async (req, res) => {
+  try {
+    const Message = require('../models/Message');
+    const { message: replyText } = req.body;
+    
+    if (!replyText) {
+      return res.status(400).json({ message: 'Reply message is required' });
+    }
+    
+    const originalMessage = await Message.findById(req.params.id);
+    if (!originalMessage) {
+      return res.status(404).json({ message: 'Original message not found' });
+    }
+    
+    const reply = new Message({
+      from: 'admin',
+      fromId: req.user._id,
+      fromName: req.user.name,
+      to: originalMessage.from,
+      toId: originalMessage.fromId,
+      toName: originalMessage.fromName,
+      subject: `Re: ${originalMessage.subject}`,
+      message: replyText,
+      type: 'direct',
+      parentMessageId: originalMessage._id,
+      studentId: originalMessage.studentId
+    });
+    
+    await reply.save();
+    
+    // Mark original as read
+    originalMessage.isRead = true;
+    originalMessage.readAt = new Date();
+    await originalMessage.save();
+    
+    res.status(201).json({ message: 'Reply sent successfully', data: reply });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
 

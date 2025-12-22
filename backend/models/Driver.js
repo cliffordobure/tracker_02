@@ -75,6 +75,19 @@ const driverSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Journey'
   },
+  speed: {
+    type: Number,
+    default: 0 // Speed in km/h
+  },
+  lastLocationUpdate: {
+    type: Date
+  },
+  previousLatitude: {
+    type: Number
+  },
+  previousLongitude: {
+    type: Number
+  },
   createdAt: {
     type: Date,
     default: Date.now

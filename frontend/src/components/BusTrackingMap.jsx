@@ -182,9 +182,10 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
             [driverId]: {
               latitude: newLat,
               longitude: newLng,
-              driverName: data.driverName || prev[driverId]?.driverName || 'Unknown',
+              driverName: data.driverName || prev[driverId]?.driverName || 'Unknown Driver',
               routeName: data.routeName || prev[driverId]?.routeName || 'No Route',
-              vehicleNumber: data.vehicleNumber || prev[driverId]?.vehicleNumber,
+              vehicleNumber: data.vehicleNumber || prev[driverId]?.vehicleNumber || '',
+              speed: data.speed || prev[driverId]?.speed || 0,
               timestamp: data.timestamp || new Date().toISOString(),
               lastUpdate: Date.now(),
               isMoving: isMoving
@@ -242,9 +243,10 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
             [driverId]: {
               latitude: newLat,
               longitude: newLng,
-              driverName: data.driverName || prev[driverId]?.driverName || 'Unknown',
+              driverName: data.driverName || prev[driverId]?.driverName || 'Unknown Driver',
               routeName: data.routeName || prev[driverId]?.routeName || 'No Route',
-              vehicleNumber: data.vehicleNumber || prev[driverId]?.vehicleNumber,
+              vehicleNumber: data.vehicleNumber || prev[driverId]?.vehicleNumber || '',
+              speed: data.speed || prev[driverId]?.speed || 0,
               timestamp: data.timestamp || new Date().toISOString(),
               lastUpdate: Date.now(),
               isMoving: isMoving
@@ -356,9 +358,10 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
             newLocations[driverId] = {
               latitude: lat,
               longitude: lng,
-              driverName: driver.name,
+              driverName: driver.name || 'Unknown Driver',
               routeName: driver.currentRoute?.name || 'No Route',
-              vehicleNumber: driver.vehicleNumber,
+              vehicleNumber: driver.vehicleNumber || '',
+              speed: driver.speed || 0,
               timestamp: driver.updatedAt || new Date().toISOString()
             }
             console.log(`✅ Updated driver ${driver.name} (${driverId}) at (${lat}, ${lng})`)
@@ -596,9 +599,9 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
 
           // Create label text - show driver name and vehicle number
           // Format: "Driver Name" or "Driver Name - BUS123"
-          const labelText = location.vehicleNumber 
-            ? `${location.driverName} - ${location.vehicleNumber}`
-            : location.driverName
+          const labelText = location.vehicleNumber && location.vehicleNumber.trim()
+            ? `${location.driverName || 'Driver'} - ${location.vehicleNumber}`
+            : (location.driverName || 'Driver')
 
           // Create dynamic icon with visual feedback for moving drivers
           let dynamicIcon = markerIcon
@@ -669,17 +672,29 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
             <div className="p-3 min-w-[200px]">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="w-3 h-3 bg-primary-600 rounded-full"></div>
-                <h3 className="font-bold text-gray-800 text-lg">{selectedDriver.driverName}</h3>
+                <h3 className="font-bold text-gray-800 text-lg">{selectedDriver.driverName || 'Unknown Driver'}</h3>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-gray-700">
-                  <span className="font-semibold text-gray-900">Route:</span> {selectedDriver.routeName}
+                  <span className="font-semibold text-gray-900">Route:</span> {selectedDriver.routeName || 'No Route'}
                 </p>
-                {selectedDriver.vehicleNumber && (
+                {selectedDriver.vehicleNumber && selectedDriver.vehicleNumber.trim() && (
                   <p className="text-sm text-gray-700">
                     <span className="font-semibold text-gray-900">Vehicle:</span> 
                     <span className="ml-1 px-2 py-0.5 bg-primary-100 text-primary-800 rounded font-mono text-xs">
                       {selectedDriver.vehicleNumber}
+                    </span>
+                  </p>
+                )}
+                {selectedDriver.speed !== undefined && selectedDriver.speed !== null && (
+                  <p className="text-sm text-gray-700">
+                    <span className="font-semibold text-gray-900">Speed:</span> 
+                    <span className={`ml-1 px-2 py-0.5 rounded font-mono text-xs ${
+                      selectedDriver.speed > 60 ? 'bg-red-100 text-red-800' : 
+                      selectedDriver.speed > 30 ? 'bg-yellow-100 text-yellow-800' : 
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {selectedDriver.speed.toFixed(1)} km/h
                     </span>
                   </p>
                 )}

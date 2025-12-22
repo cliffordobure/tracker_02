@@ -20,14 +20,14 @@ const ManagerLayout = ({ children }) => {
 
   const navigation = [
     { name: 'Dashboard', path: '/manager', icon: '📊' },
-    { name: 'Students', path: '/manager/students', icon: '👨‍🎓' },
-    { name: 'Routes', path: '/manager/routes', icon: '🗺️' },
+    { name: 'Parents', path: '/manager/parents', icon: '👨‍👩‍👧' },
     { name: 'Drivers', path: '/manager/drivers', icon: '🚗' },
+    { name: 'Routes', path: '/manager/routes', icon: '🗺️' },
+    { name: 'Bus Stops', path: '/manager/stops', icon: '🚏' },
+    { name: 'Students', path: '/manager/students', icon: '👨‍🎓' },
     { name: 'Kids', path: '/manager/kids', icon: '👶' },
     { name: 'Staff', path: '/manager/teachers', icon: '👨‍💼' },
     { name: 'Notices', path: '/manager/notices', icon: '📢' },
-    { name: 'Parents', path: '/manager/parents', icon: '👨‍👩‍👧' },
-    { name: 'Bus Stops', path: '/manager/stops', icon: '🚏' },
     { name: 'Driver Ratings', path: '/manager/driver-ratings', icon: '⭐' },
     { name: 'Reports', path: '/manager/reports', icon: '📄' },
   ]

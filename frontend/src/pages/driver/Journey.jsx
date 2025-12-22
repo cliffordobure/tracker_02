@@ -172,7 +172,20 @@ const Journey = () => {
                         className="border border-yellow-200 bg-yellow-50 rounded-lg p-3 sm:p-4"
                       >
                         <div className="flex items-center space-x-3 mb-3">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0">
+                          {student.photo ? (
+                            <img 
+                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                              alt={student.name}
+                              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0 ${student.photo ? 'hidden' : ''}`}
+                          >
                             {student.name?.charAt(0)?.toUpperCase() || 'S'}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -209,7 +222,20 @@ const Journey = () => {
                         className="border border-green-200 bg-green-50 rounded-lg p-3 sm:p-4"
                       >
                         <div className="flex items-center space-x-3 mb-3">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0">
+                          {student.photo ? (
+                            <img 
+                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                              alt={student.name}
+                              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0 ${student.photo ? 'hidden' : ''}`}
+                          >
                             {student.name?.charAt(0)?.toUpperCase() || 'S'}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -248,7 +274,20 @@ const Journey = () => {
                         className="border border-gray-200 bg-gray-50 rounded-lg p-3 sm:p-4"
                       >
                         <div className="flex items-center space-x-3 mb-3">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0">
+                          {student.photo ? (
+                            <img 
+                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                              alt={student.name}
+                              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0 ${student.photo ? 'hidden' : ''}`}
+                          >
                             {student.name?.charAt(0)?.toUpperCase() || 'S'}
                           </div>
                           <div className="flex-1 min-w-0">

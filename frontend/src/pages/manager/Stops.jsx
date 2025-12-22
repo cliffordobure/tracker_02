@@ -7,6 +7,8 @@ import api from '../../services/api'
 const Stops = () => {
   const [stops, setStops] = useState([])
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingStop, setEditingStop] = useState(null)
   const [formData, setFormData] = useState({
@@ -43,12 +45,16 @@ const Stops = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
+    // Prevent double submission
+    if (submitting) return
+    
     // Validate that location is selected
     if (!formData.latitude || !formData.longitude) {
       toast.error('Please select a location on the map')
       return
     }
 
+    setSubmitting(true)
     try {
       const data = {
         ...formData,
@@ -69,6 +75,8 @@ const Stops = () => {
       fetchStops()
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to save stop')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -107,6 +115,14 @@ const Stops = () => {
     setEditingStop(null)
   }
 
+  const filteredStops = stops.filter((stop) => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      stop.name?.toLowerCase().includes(searchLower) ||
+      stop.address?.toLowerCase().includes(searchLower)
+    )
+  })
+
   return (
     <ManagerLayout>
       <div className="min-h-screen">
@@ -122,18 +138,37 @@ const Stops = () => {
                   Manage bus stops and their locations
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  resetForm()
-                  setShowModal(true)
-                }}
-                className="mt-4 sm:mt-0 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Add Stop</span>
-              </button>
+              <div className="flex items-center space-x-4 mt-4 sm:mt-0">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search stops..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <svg
+                    className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <button
+                  onClick={() => {
+                    resetForm()
+                    setShowModal(true)
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Stop</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -149,7 +184,7 @@ const Stops = () => {
           </div>
         ) : (
           <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
-            {stops.length === 0 ? (
+            {filteredStops.length === 0 ? (
               <div className="text-center py-16 px-6">
                 <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -157,8 +192,12 @@ const Stops = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No bus stops yet</h3>
-                <p className="text-gray-600 mb-6">Get started by creating your first bus stop</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  {searchTerm ? 'No stops match your search' : 'No bus stops yet'}
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {searchTerm ? 'Try a different search term' : 'Get started by creating your first bus stop'}
+                </p>
                 <button
                   onClick={() => {
                     resetForm()
@@ -182,7 +221,7 @@ const Stops = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {stops.map((stop, index) => (
+                    {filteredStops.map((stop, index) => (
                       <tr 
                         key={stop._id} 
                         style={{ animationDelay: `${index * 50}ms` }}
@@ -355,9 +394,10 @@ const Stops = () => {
                   </button>
                   <button 
                     type="submit" 
-                    className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                    disabled={submitting}
+                    className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingStop ? 'Update Stop' : 'Create Stop'}
+                    {submitting ? 'Saving...' : (editingStop ? 'Update Stop' : 'Create Stop')}
                   </button>
                 </div>
               </form>

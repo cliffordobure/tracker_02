@@ -30,7 +30,8 @@ const Students = () => {
     route: '',
     parents: [],
     sid: '',
-    status: 'Active'
+    status: 'Active',
+    photo: ''
   })
 
   useEffect(() => {
@@ -107,7 +108,8 @@ const Students = () => {
         route: formData.route || undefined,
         parents: formData.parents || [],
         sid: formData.sid,
-        status: formData.status
+        status: formData.status,
+        photo: formData.photo || undefined
       }
 
       if (editingStudent) {
@@ -136,7 +138,8 @@ const Students = () => {
       route: student.route?._id || student.route || '',
       parents: student.parents?.map(p => p._id || p) || [],
       sid: student.sid?._id || student.sid || '',
-      status: student.status || 'Active'
+      status: student.status || 'Active',
+      photo: student.photo || ''
     })
     setShowModal(true)
   }
@@ -163,7 +166,8 @@ const Students = () => {
       route: '',
       parents: [],
       sid: '',
-      status: 'Active'
+      status: 'Active',
+      photo: ''
     })
     setEditingStudent(null)
   }
@@ -201,7 +205,8 @@ const Students = () => {
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
-                  <tr>
+                    <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Photo</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grade</th>
@@ -213,13 +218,29 @@ const Students = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {students.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                         No students found.
                       </td>
                     </tr>
                   ) : (
                     students.map((student) => (
                       <tr key={student._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {student.photo ? (
+                            <img 
+                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                              alt={student.name}
+                              className="w-12 h-12 rounded-full object-cover"
+                              onError={(e) => {
+                                e.target.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Ccircle cx='24' cy='24' r='24' fill='%23ddd'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='20' fill='%23999'%3E${student.name?.charAt(0)?.toUpperCase() || 'S'}%3C/text%3E%3C/svg%3E`
+                              }}
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
+                              {student.name?.charAt(0)?.toUpperCase() || 'S'}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{student.name}</div>
                         </td>
@@ -284,6 +305,29 @@ const Students = () => {
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="input"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Photo</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files[0]
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onloadend = () => {
+                            setFormData({ ...formData, photo: reader.result })
+                          }
+                          reader.readAsDataURL(file)
+                        }
+                      }}
+                      className="input"
+                    />
+                    {formData.photo && (
+                      <div className="mt-2">
+                        <img src={formData.photo} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">School *</label>

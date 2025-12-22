@@ -7,6 +7,7 @@ const RoutesPage = () => {
   const [routes, setRoutes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const [editingRoute, setEditingRoute] = useState(null)
   const [drivers, setDrivers] = useState([])
   const [students, setStudents] = useState([])
@@ -129,6 +130,14 @@ const RoutesPage = () => {
     setFormData({ ...formData, students })
   }
 
+  const filteredRoutes = routes.filter((route) => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      route.name?.toLowerCase().includes(searchLower) ||
+      route.driver?.name?.toLowerCase().includes(searchLower)
+    )
+  })
+
   return (
     <ManagerLayout>
       <div className="min-h-screen">
@@ -144,18 +153,37 @@ const RoutesPage = () => {
                   Manage bus routes and assignments
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  resetForm()
-                  setShowModal(true)
-                }}
-                className="mt-4 sm:mt-0 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
-              >
+              <div className="flex items-center space-x-4 mt-4 sm:mt-0">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search routes..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <svg
+                    className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <button
+                  onClick={() => {
+                    resetForm()
+                    setShowModal(true)
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2"
+                >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 <span>Add Route</span>
               </button>
+              </div>
             </div>
           </div>
         </div>
@@ -171,15 +199,19 @@ const RoutesPage = () => {
           </div>
         ) : (
           <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
-            {routes.length === 0 ? (
+            {filteredRoutes.length === 0 ? (
               <div className="text-center py-16 px-6">
                 <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No routes yet</h3>
-                <p className="text-gray-600 mb-6">Get started by creating your first route</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  {searchTerm ? 'No routes match your search' : 'No routes yet'}
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  {searchTerm ? 'Try a different search term' : 'Get started by creating your first route'}
+                </p>
                 <button
                   onClick={() => {
                     resetForm()
@@ -203,7 +235,7 @@ const RoutesPage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {routes.map((route, index) => (
+                    {filteredRoutes.map((route, index) => (
                       <tr 
                         key={route._id} 
                         style={{ animationDelay: `${index * 50}ms` }}

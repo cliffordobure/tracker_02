@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import ManagerLayout from '../../components/layouts/ManagerLayout'
 import { fetchDrivers, createDriver, updateDriver, deleteDriver } from '../../store/slices/managerDriversSlice'
 
 const Drivers = () => {
   const dispatch = useDispatch()
+  const navigate = useNavigate()
   const { drivers, loading } = useSelector((state) => state.managerDrivers)
   const [showModal, setShowModal] = useState(false)
   const [editingDriver, setEditingDriver] = useState(null)
@@ -15,7 +17,8 @@ const Drivers = () => {
     password: '',
     phone: '',
     licenseNumber: '',
-    vehicleNumber: ''
+    vehicleNumber: '',
+    photo: ''
   })
 
   useEffect(() => {
@@ -58,7 +61,8 @@ const Drivers = () => {
       password: '',
       phone: driver.phone || '',
       licenseNumber: driver.licenseNumber || '',
-      vehicleNumber: driver.vehicleNumber || ''
+      vehicleNumber: driver.vehicleNumber || '',
+      photo: driver.photo || ''
     })
     setShowModal(true)
   }
@@ -82,7 +86,8 @@ const Drivers = () => {
       password: '',
       phone: '',
       licenseNumber: '',
-      vehicleNumber: ''
+      vehicleNumber: '',
+      photo: ''
     })
     setEditingDriver(null)
   }
@@ -153,11 +158,13 @@ const Drivers = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                     <tr>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Photo</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Name</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Email</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Phone</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">License</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ID Number</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Vehicle</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Speed</th>
                       <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -169,12 +176,23 @@ const Drivers = () => {
                         className="hover:bg-gradient-to-r hover:from-primary-50 hover:to-transparent transition-all duration-200 animate-slide-up"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
+                          {driver.photo ? (
+                            <img 
+                              src={driver.photo.startsWith('http') ? driver.photo : `http://localhost:5000${driver.photo}`} 
+                              alt={driver.name}
+                              className="w-12 h-12 rounded-full object-cover"
+                              onError={(e) => {
+                                e.target.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Ccircle cx='24' cy='24' r='24' fill='%23ddd'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='20' fill='%23999'%3E${driver.name?.charAt(0)?.toUpperCase() || 'D'}%3C/text%3E%3C/svg%3E`
+                              }}
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
                               {driver.name?.charAt(0)?.toUpperCase() || 'D'}
                             </div>
-                            <div className="text-sm font-semibold text-gray-900">{driver.name}</div>
-                          </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-gray-900">{driver.name}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-600">{driver.email}</div>
@@ -206,8 +224,47 @@ const Drivers = () => {
                             <span className="text-sm text-gray-400">-</span>
                           )}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {driver.speed !== undefined && driver.speed !== null ? (
+                            <span className={`px-3 py-1 rounded-lg text-sm font-medium font-mono ${
+                              driver.speed > 60 ? 'bg-red-50 text-red-700' : 
+                              driver.speed > 30 ? 'bg-yellow-50 text-yellow-700' : 
+                              'bg-green-50 text-green-700'
+                            }`}>
+                              {driver.speed.toFixed(1)} km/h
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-400">-</span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
+                            {driver.latitude && driver.longitude && (
+                              <>
+                                <button
+                                  onClick={() => navigate(`/manager/map?driver=${driver._id}`)}
+                                  className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-all duration-200 transform hover:scale-105 font-semibold flex items-center space-x-1"
+                                  title="View on Map"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                  </svg>
+                                  <span>Map</span>
+                                </button>
+                                {driver.currentRoute && (
+                                  <button
+                                    onClick={() => navigate(`/manager/routes?route=${driver.currentRoute._id || driver.currentRoute}`)}
+                                    className="px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-all duration-200 transform hover:scale-105 font-semibold flex items-center space-x-1"
+                                    title="View Route"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                    </svg>
+                                    <span>Route</span>
+                                  </button>
+                                )}
+                              </>
+                            )}
                             <button
                               onClick={() => handleEdit(driver)}
                               className="px-4 py-2 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100 transition-all duration-200 transform hover:scale-105 font-semibold flex items-center space-x-1"
@@ -311,14 +368,38 @@ const Drivers = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">License Number</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">ID Number</label>
                     <input
                       type="text"
                       value={formData.licenseNumber}
                       onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 font-mono"
-                      placeholder="Enter license number"
+                      placeholder="Enter ID number"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Photo</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files[0]
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onloadend = () => {
+                            setFormData({ ...formData, photo: reader.result })
+                          }
+                          reader.readAsDataURL(file)
+                        }
+                      }}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
+                    />
+                    {formData.photo && (
+                      <div className="mt-2">
+                        <img src={formData.photo} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
+                      </div>
+                    )}
+                  </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Vehicle Number *</label>

@@ -145,6 +145,68 @@ router.post('/parents', async (req, res) => {
   }
 });
 
+// Update parent
+router.put('/parents/:id', async (req, res) => {
+  try {
+    const { name, email, password, phone, photo } = req.body;
+
+    const parent = await Parent.findById(req.params.id);
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent not found' });
+    }
+
+    // Check if parent belongs to manager's school
+    if (parent.sid && parent.sid.toString() !== req.user.sid.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (email && email !== parent.email) {
+      const existingParent = await Parent.findOne({ email });
+      if (existingParent) {
+        return res.status(400).json({ message: 'Email already exists' });
+      }
+      parent.email = email;
+    }
+
+    if (name) parent.name = name;
+    if (phone !== undefined) parent.phone = phone;
+    if (photo) parent.photo = photo;
+    if (password) {
+      // Password will be hashed by the pre-save hook
+      parent.password = password;
+    }
+    parent.updatedAt = Date.now();
+
+    await parent.save();
+    const parentData = parent.toObject();
+    delete parentData.password;
+
+    res.json({ message: 'Parent updated successfully', parent: parentData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete parent
+router.delete('/parents/:id', async (req, res) => {
+  try {
+    const parent = await Parent.findById(req.params.id);
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent not found' });
+    }
+
+    // Check if parent belongs to manager's school
+    if (parent.sid && parent.sid.toString() !== req.user.sid.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    await Parent.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Parent deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Get all drivers
 router.get('/drivers', async (req, res) => {
   try {
@@ -282,7 +344,7 @@ router.get('/teachers', async (req, res) => {
 // Create teacher
 router.post('/teachers', async (req, res) => {
   try {
-    const { name, email, password, phone, photo, assignedClass, permissions } = req.body;
+    const { name, email, password, phone, photo, assignedClass, assignedClasses, permissions } = req.body;
 
     // Validate required fields
     if (!name || !email || !password) {
@@ -337,7 +399,8 @@ router.post('/teachers', async (req, res) => {
       photo: photo || '/uploads/default-teacher.png',
       sid: req.user.sid,
       role: 'teacher',
-      assignedClass: assignedClass || null,
+      assignedClass: assignedClass || (assignedClasses && assignedClasses.length > 0 ? assignedClasses[0] : null), // Keep for backward compatibility
+      assignedClasses: assignedClasses || (assignedClass ? [assignedClass] : []),
       permissions: permissions || ['noticeboard', 'send', 'receive'],
       status: 'Active'
     };
@@ -397,7 +460,7 @@ router.post('/teachers', async (req, res) => {
 // Update teacher
 router.put('/teachers/:id', async (req, res) => {
   try {
-    const { name, email, phone, photo, assignedClass, permissions, status } = req.body;
+    const { name, email, phone, photo, assignedClass, assignedClasses, permissions, status } = req.body;
 
     const teacher = await Staff.findById(req.params.id);
     if (!teacher) {
@@ -422,7 +485,15 @@ router.put('/teachers/:id', async (req, res) => {
     }
     if (phone !== undefined) teacher.phone = phone;
     if (photo) teacher.photo = photo;
-    if (assignedClass !== undefined) teacher.assignedClass = assignedClass;
+    if (assignedClasses !== undefined) {
+      teacher.assignedClasses = assignedClasses;
+      // Update assignedClass for backward compatibility (use first class)
+      teacher.assignedClass = assignedClasses && assignedClasses.length > 0 ? assignedClasses[0] : null;
+    } else if (assignedClass !== undefined) {
+      teacher.assignedClass = assignedClass;
+      // Update assignedClasses array
+      teacher.assignedClasses = assignedClass ? [assignedClass] : [];
+    }
     if (permissions) teacher.permissions = permissions;
     if (status) teacher.status = status;
     teacher.updatedAt = Date.now();

@@ -8,6 +8,12 @@ import Parents from './Parents'
 import Students from './Students'
 import ActiveSuspendedSchools from './ActiveSuspendedSchools'
 import ActiveSuspendedDrivers from './ActiveSuspendedDrivers'
+import CategorizedStudents from './CategorizedStudents'
+import CategorizedTeachers from './CategorizedTeachers'
+import OnLeave from './OnLeave'
+import Inbox from './Inbox'
+import Outbox from './Outbox'
+import TrackingReport from './TrackingReport'
 
 const AdminRouter = () => {
   return (
@@ -17,10 +23,16 @@ const AdminRouter = () => {
       <Route path="/managers" element={<Managers />} />
       <Route path="/parents" element={<Parents />} />
       <Route path="/students" element={<Students />} />
+      <Route path="/students-by-class" element={<CategorizedStudents />} />
+      <Route path="/teachers-by-class" element={<CategorizedTeachers />} />
+      <Route path="/on-leave" element={<OnLeave />} />
+      <Route path="/inbox" element={<Inbox />} />
+      <Route path="/outbox" element={<Outbox />} />
       <Route path="/active-suspended-schools" element={<ActiveSuspendedSchools />} />
       <Route path="/active-suspended-drivers" element={<ActiveSuspendedDrivers />} />
       <Route path="/staff" element={<Staff />} />
       <Route path="/reports" element={<Reports />} />
+      <Route path="/tracking-report" element={<TrackingReport />} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
   )

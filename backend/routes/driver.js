@@ -132,9 +132,36 @@ router.post('/location', async (req, res) => {
       });
     }
 
+    // Calculate speed if we have previous location
+    let speed = 0;
+    if (driver.previousLatitude && driver.previousLongitude && driver.lastLocationUpdate) {
+      const timeDiff = (Date.now() - driver.lastLocationUpdate.getTime()) / 1000; // seconds
+      if (timeDiff > 0) {
+        // Calculate distance using Haversine formula
+        const R = 6371; // Earth's radius in km
+        const dLat = (lat - driver.previousLatitude) * Math.PI / 180;
+        const dLon = (lng - driver.previousLongitude) * Math.PI / 180;
+        const a = 
+          Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(driver.previousLatitude * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
+          Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distance = R * c; // distance in km
+        
+        // Speed in km/h
+        speed = (distance / timeDiff) * 3600;
+        // Cap at reasonable maximum (e.g., 120 km/h)
+        speed = Math.min(speed, 120);
+      }
+    }
+    
     // Update driver location
+    driver.previousLatitude = driver.latitude;
+    driver.previousLongitude = driver.longitude;
     driver.latitude = lat;
     driver.longitude = lng;
+    driver.speed = speed;
+    driver.lastLocationUpdate = new Date();
     driver.updatedAt = Date.now();
     await driver.save();
 
@@ -148,6 +175,7 @@ router.post('/location', async (req, res) => {
       routeId: driver.currentRoute?._id?.toString(),
       routeName: driver.currentRoute?.name,
       vehicleNumber: driver.vehicleNumber,
+      speed: driver.speed || 0,
       timestamp: new Date().toISOString()
     };
 
