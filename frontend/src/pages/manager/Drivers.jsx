@@ -434,7 +434,6 @@ const Drivers = () => {
                       </div>
                     )}
                   </div>
-                  </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Vehicle Number *</label>
                     <input
