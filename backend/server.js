@@ -90,8 +90,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase body parser limit to handle image uploads (10MB)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve uploaded files from parent directory (uploads folder preserved from PHP app)
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // Serve public images

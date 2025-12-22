@@ -482,9 +482,43 @@ const Students = () => {
                       onChange={(e) => {
                         const file = e.target.files[0]
                         if (file) {
+                          // Check file size (max 5MB)
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast.error('Image size must be less than 5MB. Please compress the image.')
+                            return
+                          }
+                          
                           const reader = new FileReader()
                           reader.onloadend = () => {
-                            setFormData({ ...formData, photo: reader.result })
+                            // Compress image if it's too large
+                            const img = new Image()
+                            img.onload = () => {
+                              const canvas = document.createElement('canvas')
+                              let width = img.width
+                              let height = img.height
+                              
+                              // Resize if image is larger than 800px
+                              const maxDimension = 800
+                              if (width > maxDimension || height > maxDimension) {
+                                if (width > height) {
+                                  height = (height / width) * maxDimension
+                                  width = maxDimension
+                                } else {
+                                  width = (width / height) * maxDimension
+                                  height = maxDimension
+                                }
+                              }
+                              
+                              canvas.width = width
+                              canvas.height = height
+                              const ctx = canvas.getContext('2d')
+                              ctx.drawImage(img, 0, 0, width, height)
+                              
+                              // Convert to base64 with compression (0.8 quality)
+                              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8)
+                              setFormData({ ...formData, photo: compressedDataUrl })
+                            }
+                            img.src = reader.result
                           }
                           reader.readAsDataURL(file)
                         }
