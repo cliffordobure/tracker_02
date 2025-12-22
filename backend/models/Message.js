@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const messageSchema = new mongoose.Schema({
   from: {
     type: String,
-    enum: ['parent', 'driver', 'manager', 'staff', 'admin'],
+    enum: ['parent', 'driver', 'manager', 'staff', 'admin', 'teacher'],
     required: true
   },
   fromId: {
@@ -17,7 +17,7 @@ const messageSchema = new mongoose.Schema({
   },
   to: {
     type: String,
-    enum: ['parent', 'driver', 'manager', 'staff', 'admin'],
+    enum: ['parent', 'driver', 'manager', 'staff', 'admin', 'teacher'],
     required: true
   },
   toId: {
