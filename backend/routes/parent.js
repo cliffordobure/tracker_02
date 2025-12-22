@@ -1093,102 +1093,137 @@ router.put('/notices/:noticeId/read', async (req, res) => {
 });
 
 // ==================== INBOX/MESSAGES ENDPOINTS ====================
+// IMPORTANT: Route order is critical! Specific routes MUST come before parameterized routes.
+// Express matches routes in order, so /messages/:id would match /messages/manager if defined first.
 
-// Get parent's messages with pagination and filters
-router.get('/messages', async (req, res) => {
+const { sendToManager } = require('../controllers/parentMessageController');
+
+// Specific routes first (must come before parameterized routes)
+// Mark all messages as read
+router.put('/messages/read-all', async (req, res) => {
   try {
-    const parent = await Parent.findById(req.user._id);
-    if (!parent) {
-      return res.status(404).json({ message: 'Parent not found' });
-    }
-
-    const { page = 1, limit = 20, type, isRead, studentId } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Build query
-    let query = {
-      to: 'parent',
-      toId: req.user._id,
-      isdelete: false
-    };
-
-    // Filter by type if provided
-    if (type) {
-      query.type = type;
-    }
-
-    // Filter by read status if provided
-    if (isRead !== undefined) {
-      query.isRead = isRead === 'true';
-    }
-
-    // Filter by student if provided
-    if (studentId) {
-      // Verify student belongs to parent
-      if (!parent.students.includes(studentId)) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-      query.studentId = studentId;
-    }
-
-    const messages = await Message.find(query)
-      .populate('studentId', 'name photo')
-      .populate('fromId', 'name')
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip(skip);
-
-    const total = await Message.countDocuments(query);
-
-    // Build full URLs for attachments
-    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-
-    const messagesData = messages.map(msg => ({
-      id: msg._id,
-      from: {
-        id: msg.fromId._id,
-        name: msg.fromName || msg.fromId.name,
-        type: msg.from
+    await Message.updateMany(
+      {
+        to: 'parent',
+        toId: req.user._id,
+        isRead: false,
+        isdelete: false
       },
-      to: {
-        id: msg.toId,
-        type: msg.to
-      },
-      student: msg.studentId ? {
-        id: msg.studentId._id,
-        name: msg.studentId.name,
-        photo: msg.studentId.photo
-      } : null,
-      subject: msg.subject,
-      message: msg.message,
-      type: msg.type,
-      isRead: msg.isRead,
-      attachments: msg.attachments.map(att => {
-        if (att.startsWith('http://') || att.startsWith('https://')) {
-          return att;
+      {
+        $set: {
+          isRead: true,
+          readAt: new Date()
         }
-        return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
-      }),
-      parentMessageId: msg.parentMessageId,
-      createdAt: msg.createdAt
-    }));
-
-    res.json({
-      message: 'success',
-      data: messagesData,
-      pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
       }
-    });
+    );
+
+    res.json({ message: 'All messages marked as read' });
   } catch (error) {
-    console.error('Error fetching messages:', error);
+    console.error('Error marking all messages as read:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
+// Send message to driver
+router.post('/messages/driver', async (req, res) => {
+  try {
+    const { driverId, studentId, subject, message, attachments } = req.body;
+    const parent = await Parent.findById(req.user._id);
+
+    if (!driverId || !message) {
+      return res.status(400).json({ message: 'Driver ID and message are required' });
+    }
+
+    // Verify driver exists
+    const driver = await Driver.findById(driverId);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Verify student belongs to parent if provided
+    if (studentId) {
+      if (!parent.students.includes(studentId)) {
+        return res.status(403).json({ message: 'Access denied. Student does not belong to you.' });
+      }
+    }
+
+    // Create message
+    const newMessage = new Message({
+      from: 'parent',
+      fromId: parent._id,
+      fromName: parent.name,
+      to: 'driver',
+      toId: driver._id,
+      studentId: studentId || null,
+      subject: subject || `Message from ${parent.name}`,
+      message,
+      type: 'direct',
+      attachments: attachments || []
+    });
+
+    await newMessage.save();
+
+    // Notify driver via Socket.io and FCM
+    const io = getSocketIO();
+    const notificationMessage = `💬 New message from ${parent.name}${studentId ? ` about ${(await Student.findById(studentId)).name}` : ''}`;
+
+    // Send Socket.io notification
+    io.to(`driver:${driver._id}`).emit('notification', {
+      type: 'message',
+      messageId: newMessage._id,
+      from: parent.name,
+      fromType: 'parent',
+      subject: newMessage.subject,
+      studentId: studentId || null,
+      timestamp: new Date().toISOString()
+    });
+
+    // Send FCM notification to driver
+    if (driver.deviceToken && driver.deviceToken.trim() !== '') {
+      try {
+        await sendToDevice(
+          driver.deviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: newMessage._id.toString(),
+            fromId: parent._id.toString(),
+            fromName: parent.name,
+            fromType: 'parent',
+            subject: newMessage.subject,
+            studentId: studentId || null
+          },
+          '💬 New Message'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to driver:', fcmError);
+      }
+    }
+
+    res.status(201).json({
+      message: 'Message sent to driver successfully',
+      data: {
+        id: newMessage._id,
+        to: {
+          id: driver._id,
+          name: driver.name,
+          type: 'driver'
+        },
+        subject: newMessage.subject,
+        message: newMessage.message,
+        createdAt: newMessage.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error sending message to driver:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Send message to manager
+router.post('/messages/manager', sendToManager);
+
+// Parameterized routes (must come after specific routes)
 // Get specific message details
 router.get('/messages/:messageId', async (req, res) => {
   try {
@@ -1265,6 +1300,7 @@ router.get('/messages/:messageId', async (req, res) => {
   }
 });
 
+// Parameterized routes (must come after specific routes)
 // Mark message as read
 router.put('/messages/:messageId/read', async (req, res) => {
   try {
@@ -1297,31 +1333,6 @@ router.put('/messages/:messageId/read', async (req, res) => {
     });
   } catch (error) {
     console.error('Error marking message as read:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// Mark all messages as read
-router.put('/messages/read-all', async (req, res) => {
-  try {
-    await Message.updateMany(
-      {
-        to: 'parent',
-        toId: req.user._id,
-        isRead: false,
-        isdelete: false
-      },
-      {
-        $set: {
-          isRead: true,
-          readAt: new Date()
-        }
-      }
-    );
-
-    res.json({ message: 'All messages marked as read' });
-  } catch (error) {
-    console.error('Error marking all messages as read:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -1519,6 +1530,7 @@ router.post('/messages/teacher', async (req, res) => {
   }
 });
 
+// Parameterized routes (must come after specific routes)
 // Reply to a message
 router.post('/messages/:messageId/reply', async (req, res) => {
   try {
@@ -1645,6 +1657,102 @@ router.post('/messages/:messageId/reply', async (req, res) => {
     });
   } catch (error) {
     console.error('Error sending reply:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// General routes last (must come after all specific and parameterized routes)
+// Get parent's messages with pagination and filters
+router.get('/messages', async (req, res) => {
+  try {
+    const parent = await Parent.findById(req.user._id);
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent not found' });
+    }
+
+    const { page = 1, limit = 20, type, isRead, studentId } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build query
+    let query = {
+      to: 'parent',
+      toId: req.user._id,
+      isdelete: false
+    };
+
+    // Filter by type if provided
+    if (type) {
+      query.type = type;
+    }
+
+    // Filter by read status if provided
+    if (isRead !== undefined) {
+      query.isRead = isRead === 'true';
+    }
+
+    // Filter by student if provided
+    if (studentId) {
+      // Verify student belongs to parent
+      if (!parent.students.includes(studentId)) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      query.studentId = studentId;
+    }
+
+    const messages = await Message.find(query)
+      .populate('studentId', 'name photo')
+      .populate('fromId', 'name')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip);
+
+    const total = await Message.countDocuments(query);
+
+    // Build full URLs for attachments
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+
+    const messagesData = messages.map(msg => ({
+      id: msg._id,
+      from: {
+        id: msg.fromId._id,
+        name: msg.fromName || msg.fromId.name,
+        type: msg.from
+      },
+      to: {
+        id: msg.toId,
+        type: msg.to
+      },
+      student: msg.studentId ? {
+        id: msg.studentId._id,
+        name: msg.studentId.name,
+        photo: msg.studentId.photo
+      } : null,
+      subject: msg.subject,
+      message: msg.message,
+      type: msg.type,
+      isRead: msg.isRead,
+      attachments: msg.attachments.map(att => {
+        if (att.startsWith('http://') || att.startsWith('https://')) {
+          return att;
+        }
+        return `${baseUrl}${att.startsWith('/') ? '' : '/'}${att}`;
+      }),
+      parentMessageId: msg.parentMessageId,
+      createdAt: msg.createdAt
+    }));
+
+    res.json({
+      message: 'success',
+      data: messagesData,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
