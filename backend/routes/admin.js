@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { authenticate, authorize } = require('../middleware/auth');
 const Admin = require('../models/Admin');
 const Manager = require('../models/Manager');
@@ -363,9 +364,276 @@ router.get('/reports', async (req, res) => {
   }
 });
 
-// Note: Admin does not have direct access to individual student/parent records
-// Admin manages schools, managers, and high-level notices
-// Detailed student and parent management is handled by individual school managers
+// Get all parents (admin only - no data privacy restrictions)
+router.get('/parents', async (req, res) => {
+  try {
+    const parents = await Parent.find({})
+      .select('-password')
+      .populate('students', 'name grade status')
+      .populate('sid', 'name')
+      .sort({ createdAt: -1 });
+    res.json(parents);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Create parent (admin only)
+router.post('/parents', async (req, res) => {
+  try {
+    const { name, email, password, phone, sid } = req.body;
+
+    const existingParent = await Parent.findOne({ email });
+    if (existingParent) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    const parent = new Parent({
+      name,
+      email,
+      password,
+      phone,
+      sid: sid || null,
+      status: 'Active'
+    });
+
+    await parent.save();
+    const parentData = parent.toObject();
+    delete parentData.password;
+
+    res.status(201).json({ message: 'Parent created successfully', parent: parentData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update parent (admin only)
+router.put('/parents/:id', async (req, res) => {
+  try {
+    const { name, email, phone, sid, status } = req.body;
+
+    const parent = await Parent.findById(req.params.id);
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent not found' });
+    }
+
+    if (email && email !== parent.email) {
+      const existingParent = await Parent.findOne({ email });
+      if (existingParent) {
+        return res.status(400).json({ message: 'Email already exists' });
+      }
+      parent.email = email;
+    }
+
+    if (name) parent.name = name;
+    if (phone !== undefined) parent.phone = phone;
+    if (sid !== undefined) parent.sid = sid;
+    if (status) parent.status = status;
+    parent.updatedAt = Date.now();
+
+    await parent.save();
+    const parentData = parent.toObject();
+    delete parentData.password;
+
+    res.json({ message: 'Parent updated successfully', parent: parentData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete parent (admin only)
+router.delete('/parents/:id', async (req, res) => {
+  try {
+    const parent = await Parent.findByIdAndDelete(req.params.id);
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent not found' });
+    }
+    res.json({ message: 'Parent deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get all students (admin only - no data privacy restrictions)
+router.get('/students', async (req, res) => {
+  try {
+    const students = await Student.find({ isdelete: false })
+      .populate('sid', 'name')
+      .populate('route', 'name')
+      .populate('parents', 'name email')
+      .sort({ createdAt: -1 });
+    res.json(students);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Create student (admin only)
+router.post('/students', async (req, res) => {
+  try {
+    const { name, grade, address, latitude, longitude, route, parents, sid, status } = req.body;
+
+    if (!sid) {
+      return res.status(400).json({ message: 'School ID is required' });
+    }
+
+    const student = new Student({
+      name,
+      sid,
+      grade,
+      address,
+      latitude,
+      longitude,
+      route: route || undefined,
+      parents: parents || [],
+      status: status || 'Active'
+    });
+
+    await student.save();
+
+    // Update parent's student list
+    if (parents && parents.length > 0) {
+      await Parent.updateMany(
+        { _id: { $in: parents } },
+        { $addToSet: { students: student._id } }
+      );
+    }
+
+    res.status(201).json({ message: 'Student created successfully', student });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update student (admin only)
+router.put('/students/:id', async (req, res) => {
+  try {
+    const { name, grade, address, latitude, longitude, route, status, parents, sid } = req.body;
+
+    const student = await Student.findById(req.params.id);
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Store old parents before updating
+    const oldParentIds = student.parents ? student.parents.map(p => p.toString()) : [];
+
+    if (name) student.name = name;
+    if (grade) student.grade = grade;
+    if (address !== undefined) student.address = address;
+    if (latitude !== undefined) student.latitude = latitude;
+    if (longitude !== undefined) student.longitude = longitude;
+    if (route) student.route = route;
+    if (status) student.status = status;
+    if (sid) student.sid = sid;
+    
+    // Handle parents assignment
+    if (parents !== undefined) {
+      const newParentIds = Array.isArray(parents) 
+        ? parents.filter(p => p).map(p => p.toString())
+        : [];
+      
+      student.parents = newParentIds.map(id => new mongoose.Types.ObjectId(id));
+
+      // Find parents that were removed
+      const removedParentIds = oldParentIds.filter(pId => !newParentIds.includes(pId));
+      
+      // Find parents that were added
+      const addedParentIds = newParentIds.filter(pId => !oldParentIds.includes(pId));
+
+      // Remove student from parents that were unassigned
+      if (removedParentIds.length > 0) {
+        await Parent.updateMany(
+          { _id: { $in: removedParentIds } },
+          { $pull: { students: student._id } }
+        );
+      }
+
+      // Add student to newly assigned parents
+      if (addedParentIds.length > 0) {
+        await Parent.updateMany(
+          { _id: { $in: addedParentIds } },
+          { $addToSet: { students: student._id } }
+        );
+      }
+    }
+
+    student.updatedAt = Date.now();
+    await student.save();
+
+    res.json({ message: 'Student updated successfully', student });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete student (admin only - soft delete)
+router.delete('/students/:id', async (req, res) => {
+  try {
+    const student = await Student.findByIdAndUpdate(
+      req.params.id,
+      { isdelete: true, updatedAt: Date.now() },
+      { new: true }
+    );
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    res.json({ message: 'Student deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get all drivers (admin only)
+router.get('/drivers', async (req, res) => {
+  try {
+    const { status } = req.query;
+    let query = { status: { $ne: 'Deleted' } };
+    
+    if (status && (status === 'Active' || status === 'Suspended')) {
+      query.status = status;
+    }
+    
+    const drivers = await Driver.find(query)
+      .select('-password')
+      .populate('sid', 'name')
+      .populate('currentRoute', 'name')
+      .sort({ createdAt: -1 });
+    res.json(drivers);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update driver status (admin only)
+router.put('/drivers/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    if (!status || (status !== 'Active' && status !== 'Suspended')) {
+      return res.status(400).json({ message: 'Invalid status. Must be Active or Suspended' });
+    }
+    
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    
+    driver.status = status;
+    driver.updatedAt = Date.now();
+    await driver.save();
+    
+    const driverData = driver.toObject();
+    delete driverData.password;
+    
+    res.json({ message: `Driver ${status.toLowerCase()} successfully`, driver: driverData });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Note: Admin now has full access to manage parents and students
+// Detailed student and parent management is also handled by individual school managers
 
 module.exports = router;
 

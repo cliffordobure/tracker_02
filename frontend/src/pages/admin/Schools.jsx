@@ -13,6 +13,7 @@ const Schools = () => {
   const { schools, loading } = useSelector((state) => state.schools)
   const [showModal, setShowModal] = useState(false)
   const [editingSchool, setEditingSchool] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -89,15 +90,18 @@ const Schools = () => {
     setShowModal(true)
   }
 
-  const handleSuspend = async (id) => {
-    if (!window.confirm('Are you sure you want to suspend this school?')) return
+  const handleSuspend = async (school) => {
+    const newStatus = school.status === 'Active' ? 'Suspended' : 'Active'
+    const action = newStatus === 'Suspended' ? 'suspend' : 'activate'
+    
+    if (!window.confirm(`Are you sure you want to ${action} this school?`)) return
     
     try {
-      await dispatch(updateSchool({ id, schoolData: { status: 'Suspended' } })).unwrap()
-      toast.success('School suspended successfully!')
+      await dispatch(updateSchool({ id: school._id, schoolData: { status: newStatus } })).unwrap()
+      toast.success(`School ${action}d successfully!`)
       dispatch(fetchSchools())
     } catch (error) {
-      toast.error(error || 'Failed to suspend school')
+      toast.error(error || `Failed to ${action} school`)
     }
   }
 
@@ -128,6 +132,17 @@ const Schools = () => {
     setEditingSchool(null)
   }
 
+  const filteredSchools = schools.filter((school) => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      school.name?.toLowerCase().includes(searchLower) ||
+      school.city?.toLowerCase().includes(searchLower) ||
+      school.county?.toLowerCase().includes(searchLower) ||
+      school.email?.toLowerCase().includes(searchLower) ||
+      school.phone?.toLowerCase().includes(searchLower)
+    )
+  })
+
   return (
     <AdminLayout>
       <div className="p-6">
@@ -136,15 +151,34 @@ const Schools = () => {
             <h1 className="text-3xl font-bold text-gray-800">Schools</h1>
             <p className="text-gray-600 mt-1">Manage all schools in the system</p>
           </div>
-          <button
-            onClick={() => {
-              resetForm()
-              setShowModal(true)
-            }}
-            className="btn btn-primary"
-          >
-            + Add School
-          </button>
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search schools..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <svg
+                className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <button
+              onClick={() => {
+                resetForm()
+                setShowModal(true)
+              }}
+              className="btn btn-primary"
+            >
+              + Add School
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -168,6 +202,9 @@ const Schools = () => {
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Created
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -176,14 +213,14 @@ const Schools = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {schools.length === 0 ? (
+                  {filteredSchools.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
-                        No schools found. Create your first school!
+                      <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                        {searchTerm ? 'No schools match your search.' : 'No schools found. Create your first school!'}
                       </td>
                     </tr>
                   ) : (
-                    schools.map((school) => (
+                    filteredSchools.map((school) => (
                       <tr key={school._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{school.name}</div>
@@ -207,6 +244,9 @@ const Schools = () => {
                             {school.status}
                           </span>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {school.createdAt ? new Date(school.createdAt).toLocaleString() : '-'}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
                             onClick={() => handleEdit(school)}
@@ -215,7 +255,7 @@ const Schools = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleSuspend(school._id)}
+                            onClick={() => handleSuspend(school)}
                             className="text-orange-600 hover:text-orange-900"
                           >
                             {school.status === 'Active' ? 'Suspend' : 'Activate'}

@@ -22,6 +22,10 @@ const AdminLayout = ({ children }) => {
     { name: 'Dashboard', path: '/admin', icon: '📊' },
     { name: 'Schools', path: '/admin/schools', icon: '🏫' },
     { name: 'Managers', path: '/admin/managers', icon: '👥' },
+    { name: 'Parents', path: '/admin/parents', icon: '👨‍👩‍👧' },
+    { name: 'Students', path: '/admin/students', icon: '👨‍🎓' },
+    { name: 'Active/Suspended Schools', path: '/admin/active-suspended-schools', icon: '🏫' },
+    { name: 'Active/Suspended Drivers', path: '/admin/active-suspended-drivers', icon: '🚗' },
     { name: 'Staff', path: '/admin/staff', icon: '👨‍💼' },
     { name: 'Reports', path: '/admin/reports', icon: '📄' },
   ]

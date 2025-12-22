@@ -12,6 +12,7 @@ const Managers = () => {
   const { schools } = useSelector((state) => state.schools)
   const [showModal, setShowModal] = useState(false)
   const [editingManager, setEditingManager] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -74,15 +75,18 @@ const Managers = () => {
     setShowModal(true)
   }
 
-  const handleSuspend = async (id) => {
-    if (!window.confirm('Are you sure you want to suspend this manager?')) return
+  const handleSuspend = async (manager) => {
+    const newStatus = manager.status === 'Active' ? 'Suspended' : 'Active'
+    const action = newStatus === 'Suspended' ? 'suspend' : 'activate'
+    
+    if (!window.confirm(`Are you sure you want to ${action} this manager?`)) return
     
     try {
-      await dispatch(updateManager({ id, managerData: { status: 'Suspended' } })).unwrap()
-      toast.success('Manager suspended successfully!')
+      await dispatch(updateManager({ id: manager._id, managerData: { status: newStatus } })).unwrap()
+      toast.success(`Manager ${action}d successfully!`)
       dispatch(fetchManagers())
     } catch (error) {
-      toast.error(error || 'Failed to suspend manager')
+      toast.error(error || `Failed to ${action} manager`)
     }
   }
 
@@ -125,6 +129,16 @@ const Managers = () => {
     'stops', 'send', 'receive'
   ]
 
+  const filteredManagers = managers.filter((manager) => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      manager.name?.toLowerCase().includes(searchLower) ||
+      manager.email?.toLowerCase().includes(searchLower) ||
+      manager.phone?.toLowerCase().includes(searchLower) ||
+      manager.sid?.name?.toLowerCase().includes(searchLower)
+    )
+  })
+
   return (
     <AdminLayout>
       <div className="p-6">
@@ -133,15 +147,34 @@ const Managers = () => {
             <h1 className="text-3xl font-bold text-gray-800">Managers</h1>
             <p className="text-gray-600 mt-1">Manage school managers</p>
           </div>
-          <button
-            onClick={() => {
-              resetForm()
-              setShowModal(true)
-            }}
-            className="btn btn-primary"
-          >
-            + Add Manager
-          </button>
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search managers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <svg
+                className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <button
+              onClick={() => {
+                resetForm()
+                setShowModal(true)
+              }}
+              className="btn btn-primary"
+            >
+              + Add Manager
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -157,19 +190,20 @@ const Managers = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Delete</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {managers.length === 0 ? (
+                  {filteredManagers.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                        No managers found. Create your first manager!
+                      <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
+                        {searchTerm ? 'No managers match your search.' : 'No managers found. Create your first manager!'}
                       </td>
                     </tr>
                   ) : (
-                    managers.map((manager) => (
+                    filteredManagers.map((manager) => (
                       <tr key={manager._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{manager.name}</div>
@@ -193,6 +227,9 @@ const Managers = () => {
                             {manager.status}
                           </span>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {manager.createdAt ? new Date(manager.createdAt).toLocaleString() : '-'}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
                             onClick={() => handleEdit(manager)}
@@ -201,7 +238,7 @@ const Managers = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleSuspend(manager._id)}
+                            onClick={() => handleSuspend(manager)}
                             className="text-orange-600 hover:text-orange-900"
                           >
                             {manager.status === 'Active' ? 'Suspend' : 'Activate'}
