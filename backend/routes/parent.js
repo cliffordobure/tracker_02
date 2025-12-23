@@ -1097,8 +1097,70 @@ router.put('/notices/:noticeId/read', async (req, res) => {
 // Express matches routes in order, so /messages/:id would match /messages/manager if defined first.
 
 const { sendToManager } = require('../controllers/parentMessageController');
+const Manager = require('../models/Manager');
 
 // Specific routes first (must come before parameterized routes)
+// Get manager information for parent's school
+router.get('/manager', async (req, res) => {
+  try {
+    const parent = await Parent.findById(req.user._id);
+    
+    if (!parent) {
+      return res.status(404).json({
+        success: false,
+        message: 'Parent not found'
+      });
+    }
+    
+    // Find manager for parent's school
+    const manager = await Manager.findOne({
+      sid: parent.sid,
+      status: 'Active',
+      isDeleted: false
+    }).select('_id name email phone photo sid status');
+    
+    if (!manager) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manager not found for your school'
+      });
+    }
+    
+    // Build full photo URL if photo exists
+    let photoUrl = null;
+    if (manager.photo) {
+      if (manager.photo.startsWith('http://') || manager.photo.startsWith('https://')) {
+        photoUrl = manager.photo;
+      } else {
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        photoUrl = `${baseUrl}${manager.photo.startsWith('/') ? '' : '/'}${manager.photo}`;
+      }
+    }
+    
+    const managerData = {
+      id: manager._id.toString(),
+      name: manager.name,
+      email: manager.email || null,
+      phone: manager.phone || null,
+      photo: photoUrl,
+      sid: manager.sid ? manager.sid.toString() : null,
+      status: manager.status
+    };
+    
+    res.status(200).json({
+      success: true,
+      message: 'Manager information retrieved successfully',
+      manager: managerData
+    });
+  } catch (error) {
+    console.error('Error fetching manager information:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
 // Mark all messages as read
 router.put('/messages/read-all', async (req, res) => {
   try {
