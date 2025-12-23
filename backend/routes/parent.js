@@ -1112,17 +1112,61 @@ router.get('/manager', async (req, res) => {
       });
     }
     
-    // Find manager for parent's school
-    const manager = await Manager.findOne({
-      sid: parent.sid,
+    console.log(`🔍 [GET /manager] Searching for manager with SID: ${parent.sid}`);
+    
+    // Ensure SID is ObjectId for proper matching
+    let parentSid = parent.sid;
+    if (parentSid && typeof parentSid === 'string') {
+      const mongoose = require('mongoose');
+      if (mongoose.Types.ObjectId.isValid(parentSid)) {
+        parentSid = new mongoose.Types.ObjectId(parentSid);
+      }
+    }
+    
+    // Find manager for parent's school - try Active first, then any non-deleted
+    let manager = await Manager.findOne({
+      sid: parentSid,
       status: 'Active',
       isDeleted: false
     }).select('_id name email phone photo sid status');
     
+    // If no active manager, try any non-deleted manager
     if (!manager) {
+      console.log(`⚠️ [GET /manager] No Active manager found, checking for any non-deleted manager...`);
+      manager = await Manager.findOne({
+        sid: parentSid,
+        isDeleted: false
+      }).select('_id name email phone photo sid status');
+    }
+    
+    // If still no manager, try any manager (for debugging)
+    if (!manager) {
+      const anyManager = await Manager.findOne({ sid: parentSid }).select('_id name email phone photo sid status isDeleted');
+      if (anyManager) {
+        console.log(`⚠️ [GET /manager] Found manager but isDeleted: ${anyManager.isDeleted}, status: ${anyManager.status}`);
+        // Return it anyway for debugging purposes
+        manager = anyManager;
+      }
+    }
+    
+    if (!manager) {
+      console.log(`❌ [GET /manager] Manager not found for SID: ${parentSid}`);
+      
+      // Debug: Check all managers
+      const allManagers = await Manager.find({}).select('_id name sid status isDeleted').limit(10);
+      console.log(`📊 [GET /manager] Sample managers in system:`, 
+        allManagers.map(m => ({
+          id: m._id,
+          name: m.name,
+          sid: m.sid?.toString(),
+          status: m.status,
+          isDeleted: m.isDeleted
+        }))
+      );
+      
       return res.status(404).json({
         success: false,
-        message: 'Manager not found for your school'
+        message: 'Manager not found for your school. Please contact administrator to assign a manager to your school.'
       });
     }
     
