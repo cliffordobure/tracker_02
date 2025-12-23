@@ -9,6 +9,7 @@ const Notification = require('../models/Notification');
 const Journey = require('../models/Journey');
 const { getSocketIO } = require('../services/socketService');
 const { sendPushNotification } = require('../services/firebaseService');
+const journeyController = require('../controllers/journeyController');
 
 router.use(authenticate);
 
@@ -193,7 +194,7 @@ router.post('/location', async (req, res) => {
       });
     }
 
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, timestamp } = req.body; // Accept timestamp from mobile phone
 
     // Validate required fields
     if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
@@ -224,6 +225,22 @@ router.post('/location', async (req, res) => {
       });
     }
 
+    // Use mobile phone time if provided, otherwise use server time (fallback)
+    let updateTime;
+    if (timestamp) {
+      updateTime = new Date(timestamp);
+      // Validate the date
+      if (isNaN(updateTime.getTime())) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Invalid timestamp format. Please provide a valid ISO 8601 timestamp.',
+          error: 'INVALID_TIMESTAMP'
+        });
+      }
+    } else {
+      updateTime = new Date();
+    }
+
     // Get driver with route info
     const driver = await Driver.findById(req.user._id).populate('currentRoute');
 
@@ -247,8 +264,8 @@ router.post('/location', async (req, res) => {
     // Calculate speed if we have previous location
     let speed = 0;
     if (driver.previousLatitude && driver.previousLongitude && driver.lastLocationUpdate) {
-      const timeDiff = (Date.now() - driver.lastLocationUpdate.getTime()) / 1000; // seconds
-      if (timeDiff > 0) {
+      const timeDiffSeconds = (updateTime - driver.lastLocationUpdate) / 1000; // seconds
+      if (timeDiffSeconds > 0) {
         // Calculate distance using Haversine formula
         const R = 6371; // Earth's radius in km
         const dLat = (lat - driver.previousLatitude) * Math.PI / 180;
@@ -261,7 +278,7 @@ router.post('/location', async (req, res) => {
         const distance = R * c; // distance in km
         
         // Speed in km/h
-        speed = (distance / timeDiff) * 3600;
+        speed = (distance / timeDiffSeconds) * 3600;
         // Cap at reasonable maximum (e.g., 120 km/h)
         speed = Math.min(speed, 120);
       }
@@ -273,8 +290,8 @@ router.post('/location', async (req, res) => {
     driver.latitude = lat;
     driver.longitude = lng;
     driver.speed = speed;
-    driver.lastLocationUpdate = new Date();
-    driver.updatedAt = Date.now();
+    driver.lastLocationUpdate = updateTime;
+    driver.updatedAt = updateTime;
     await driver.save();
 
     // Emit location update via socket.io to route-specific room
@@ -288,7 +305,7 @@ router.post('/location', async (req, res) => {
       routeName: driver.currentRoute?.name,
       vehicleNumber: driver.vehicleNumber,
       speed: driver.speed || 0,
-      timestamp: new Date().toISOString()
+      timestamp: driver.lastLocationUpdate.toISOString()
     };
 
     // Broadcast to route room for parents tracking this route
@@ -310,7 +327,8 @@ router.post('/location', async (req, res) => {
       location: {
         latitude: driver.latitude,
         longitude: driver.longitude,
-        timestamp: driver.updatedAt
+        speed: driver.speed,
+        timestamp: driver.lastLocationUpdate
       }
     });
   } catch (error) {
@@ -324,266 +342,107 @@ router.post('/location', async (req, res) => {
 });
 
 // Start journey/trip
-router.post('/journey/start', async (req, res) => {
-  try {
-    if (req.userRole !== 'driver') {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const driver = await Driver.findById(req.user._id).populate('currentRoute');
-    
-    if (!driver.currentRoute) {
-      return res.status(400).json({ message: 'No route assigned to driver' });
-    }
-
-    const route = await Route.findById(driver.currentRoute._id)
-      .populate({
-        path: 'students',
-        populate: {
-          path: 'parents',
-          select: 'name email phone deviceToken'
-        }
-      });
-
-    if (!route) {
-      return res.status(404).json({ message: 'Route not found' });
-    }
-
-    // Determine if morning pickup or afternoon drop-off
-    const hour = new Date().getHours();
-    const isMorning = hour < 12;
-    const journeyType = isMorning ? 'pickup' : 'drop-off';
-
-    // Reset students' status in the morning (before 12 PM)
-    if (isMorning) {
-      await Student.updateMany(
-        { _id: { $in: route.students.map(s => s._id) } },
-        { $set: { pickup: '', dropped: '', status: 'Active' } }
-      );
-    } else {
-      // Reset for afternoon drop-off
-      await Student.updateMany(
-        { _id: { $in: route.students.map(s => s._id) } },
-        { $set: { dropped: '', status: 'Active' } }
-      );
-    }
-
-    // Create message for notifications
-    const message = isMorning
-      ? `🚌 The bus is now leaving school for morning pickup. Route: ${route.name}`
-      : `🚌 The bus is now leaving school for afternoon drop-off. Route: ${route.name}`;
-
-    // Get all unique parent IDs from students on this route
-    const parentIds = new Set();
-    route.students.forEach(student => {
-      if (student.parents && student.parents.length > 0) {
-        student.parents.forEach(parent => {
-          parentIds.add(parent._id);
-        });
-      }
+router.post('/journey/start', (req, res, next) => {
+  if (req.userRole !== 'driver') {
+    return res.status(403).json({ 
+      success: false,
+      message: 'Access denied' 
     });
-
-    // Create notifications for all parents
-    const notifications = [];
-    for (const parentId of parentIds) {
-      const notification = await Notification.create({
-        pid: parentId,
-        sid: route.sid,
-        message,
-        type: 'journey_started',
-        routeId: route._id
-      });
-      notifications.push(notification);
-    }
-
-    // Get Socket.io instance
-    const io = getSocketIO();
-
-    // Send real-time notifications to parents via Socket.io
-    const notificationData = {
-      type: 'journey_started',
-      routeId: route._id,
-      routeName: route.name,
-      driverId: driver._id,
-      driverName: driver.name,
-      journeyType,
-      message,
-      timestamp: new Date().toISOString(),
-      students: route.students.map(s => ({
-        id: s._id,
-        name: s.name
-      }))
-    };
-
-    // Emit to all parents connected to this route
-    parentIds.forEach(parentId => {
-      io.to(`parent:${parentId}`).emit('notification', notificationData);
-      io.to(`route:${route._id}`).emit('journey-started', notificationData);
-    });
-
-    // Emit journey start to route room
-    io.to(`route:${route._id}`).emit('journey-started', notificationData);
-
-    // Update driver journey status
-    driver.journeyStatus = 'active';
-    driver.journeyStartedAt = new Date();
-    driver.journeyType = journeyType;
-    await driver.save();
-
-    // Create Journey record for history
-    const journeyStartedAt = new Date();
-    const journeyStudents = route.students.map(student => ({
-      studentId: student._id,
-      status: 'pending'
-    }));
-
-    const journey = await Journey.create({
-      driverId: driver._id,
-      routeId: route._id,
-      status: 'in_progress',
-      journeyType: journeyType,
-      startedAt: journeyStartedAt,
-      students: journeyStudents
-    });
-
-    // Store journey ID in driver for reference
-    driver.currentJourneyId = journey._id;
-    await driver.save();
-
-    // If driver has location data, emit it so managers can see the bus on map
-    if (driver.latitude && driver.longitude) {
-      const locationData = {
-        driverId: driver._id.toString(),
-        driverName: driver.name,
-        latitude: driver.latitude,
-        longitude: driver.longitude,
-        routeId: driver.currentRoute?._id?.toString(),
-        routeName: driver.currentRoute?.name,
-        vehicleNumber: driver.vehicleNumber,
-        timestamp: new Date().toISOString()
-      };
-      
-      // Broadcast to managers and admins (global broadcast)
-      io.emit('location-update', locationData);
-      io.emit('driver-location-update', locationData);
-      
-      // Also emit to route room
-      if (driver.currentRoute) {
-        io.to(`route:${driver.currentRoute._id}`).emit('driver-location-update', locationData);
-      }
-      
-      // Broadcast to managers room specifically
-      io.to('managers').emit('location-update', locationData);
-      io.to('managers').emit('driver-location-update', locationData);
-    }
-
-    // Send FCM push notifications to all parents
-    const parentDeviceTokens = [];
-    route.students.forEach(student => {
-      if (student.parents && student.parents.length > 0) {
-        student.parents.forEach(parent => {
-          if (parent.deviceToken && parent.deviceToken.trim() !== '') {
-            parentDeviceTokens.push(parent.deviceToken);
-          }
-        });
-      }
-    });
-
-    if (parentDeviceTokens.length > 0) {
-      try {
-        const fcmResult = await sendPushNotification(
-          parentDeviceTokens,
-          message,
-          {
-            type: 'journey_started',
-            routeId: route._id.toString(),
-            routeName: route.name,
-            journeyType: journeyType,
-            driverId: driver._id.toString(),
-            driverName: driver.name
-          },
-          '🚌 Journey Started'
-        );
-        
-        if (!fcmResult.success && fcmResult.error === 'FCM_API_NOT_ENABLED') {
-          console.warn('⚠️  FCM API not enabled. Notifications saved to database but push notifications disabled.');
-        }
-      } catch (fcmError) {
-        console.error('Error sending FCM notification for journey start:', fcmError.message || fcmError);
-        // Don't fail the request if FCM fails
-      }
-    } else {
-      console.log(`ℹ️  No device tokens found for parents on route ${route.name}. Notifications saved to database.`);
-    }
-
-    res.json({
-      success: true,
-      message: 'Journey started successfully',
-      journeyType,
-      route: {
-        id: route._id,
-        name: route.name
-      },
-      studentsCount: route.students.length,
-      notificationsSent: notifications.length,
-      journeyStatus: 'active'
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
   }
-});
+  next();
+}, journeyController.startJourney);
 
 // Mark student as picked up
 router.post('/student/pickup', async (req, res) => {
   try {
     if (req.userRole !== 'driver') {
-      return res.status(403).json({ message: 'Access denied' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied' 
+      });
     }
 
-    const { studentId } = req.body;
+    const driverId = req.user._id;
+    const { studentId, pickedAt } = req.body; // Accept timestamp from mobile phone
 
     if (!studentId) {
-      return res.status(400).json({ message: 'Student ID is required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Student ID is required' 
+      });
     }
 
-    const driver = await Driver.findById(req.user._id).populate('currentRoute');
+    // Check if there's an active journey
+    const activeJourney = await Journey.findOne({
+      driverId: driverId,
+      status: 'in_progress'
+    });
+
+    if (!activeJourney) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'No active journey. Please start a journey first.' 
+      });
+    }
+
+    const driver = await Driver.findById(driverId).populate('currentRoute');
     
     // Verify student is on driver's route
     if (!driver.currentRoute) {
-      return res.status(400).json({ message: 'No route assigned to driver' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'No route assigned to driver' 
+      });
     }
 
     const route = await Route.findById(driver.currentRoute._id);
     if (!route.students.includes(studentId)) {
-      return res.status(403).json({ message: 'Student is not on your route' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Student is not on your route' 
+      });
     }
 
-    const pickupTime = new Date();
-    const student = await Student.findByIdAndUpdate(
-      studentId,
-      { 
-        pickup: pickupTime.toISOString(),
-        status: 'Active'
-      },
-      { new: true }
-    ).populate('parents');
-
+    const student = await Student.findById(studentId);
     if (!student) {
-      return res.status(404).json({ message: 'Student not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Student not found' 
+      });
     }
 
-    // Update Journey record if exists
-    const driverWithJourney = await Driver.findById(req.user._id);
-    if (driverWithJourney.currentJourneyId) {
-      await Journey.updateOne(
-        { _id: driverWithJourney.currentJourneyId, 'students.studentId': studentId },
-        {
-          $set: {
-            'students.$.pickedUpAt': pickupTime,
-            'students.$.status': 'picked_up'
-          }
-        }
-      );
+    // Use mobile phone time if provided, otherwise use server time (fallback)
+    let pickupTime;
+    if (pickedAt) {
+      pickupTime = new Date(pickedAt);
+      // Validate the date
+      if (isNaN(pickupTime.getTime())) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Invalid timestamp format. Please provide a valid ISO 8601 timestamp.' 
+        });
+      }
+    } else {
+      pickupTime = new Date();
+    }
+    // Update student pickup time
+    student.pickup = pickupTime.toISOString();
+    student.status = 'Active';
+    student.updatedAt = pickupTime;
+    await student.save();
+    
+    // Populate parents for notifications
+    await student.populate('parents');
+
+    // Update journey student status
+    const journeyStudent = activeJourney.students.find(
+      s => s.studentId.toString() === studentId
+    );
+    if (journeyStudent) {
+      journeyStudent.pickedUpAt = pickupTime;
+      journeyStudent.status = 'picked_up';
+      activeJourney.updatedAt = pickupTime;
+      await activeJourney.save();
     }
 
     // Create notifications for parents
@@ -663,9 +522,10 @@ router.post('/student/pickup', async (req, res) => {
     });
 
     res.json({
+      success: true,
       message: 'Student marked as picked up',
       student: {
-        id: student._id,
+        id: student._id.toString(),
         name: student.name,
         pickup: student.pickup
       }
@@ -679,53 +539,94 @@ router.post('/student/pickup', async (req, res) => {
 router.post('/student/drop', async (req, res) => {
   try {
     if (req.userRole !== 'driver') {
-      return res.status(403).json({ message: 'Access denied' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied' 
+      });
     }
 
-    const { studentId } = req.body;
+    const driverId = req.user._id;
+    const { studentId, droppedAt } = req.body; // Accept timestamp from mobile phone
 
     if (!studentId) {
-      return res.status(400).json({ message: 'Student ID is required' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Student ID is required' 
+      });
     }
 
-    const driver = await Driver.findById(req.user._id).populate('currentRoute');
+    // Check if there's an active journey
+    const activeJourney = await Journey.findOne({
+      driverId: driverId,
+      status: 'in_progress'
+    });
+
+    if (!activeJourney) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'No active journey. Please start a journey first.' 
+      });
+    }
+
+    const driver = await Driver.findById(driverId).populate('currentRoute');
     
     // Verify student is on driver's route
     if (!driver.currentRoute) {
-      return res.status(400).json({ message: 'No route assigned to driver' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'No route assigned to driver' 
+      });
     }
 
     const route = await Route.findById(driver.currentRoute._id);
     if (!route.students.includes(studentId)) {
-      return res.status(403).json({ message: 'Student is not on your route' });
+      return res.status(403).json({ 
+        success: false,
+        message: 'Student is not on your route' 
+      });
     }
 
-    const dropTime = new Date();
-    const student = await Student.findByIdAndUpdate(
-      studentId,
-      { 
-        dropped: dropTime.toISOString(),
-        status: 'Active'
-      },
-      { new: true }
-    ).populate('parents');
-
+    const student = await Student.findById(studentId);
     if (!student) {
-      return res.status(404).json({ message: 'Student not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Student not found' 
+      });
     }
 
-    // Update Journey record if exists
-    const driverWithJourney = await Driver.findById(req.user._id);
-    if (driverWithJourney.currentJourneyId) {
-      await Journey.updateOne(
-        { _id: driverWithJourney.currentJourneyId, 'students.studentId': studentId },
-        {
-          $set: {
-            'students.$.droppedAt': dropTime,
-            'students.$.status': 'dropped'
-          }
-        }
-      );
+    // Use mobile phone time if provided, otherwise use server time (fallback)
+    let dropTime;
+    if (droppedAt) {
+      dropTime = new Date(droppedAt);
+      // Validate the date
+      if (isNaN(dropTime.getTime())) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Invalid timestamp format. Please provide a valid ISO 8601 timestamp.' 
+        });
+      }
+    } else {
+      dropTime = new Date();
+    }
+
+    // Update student drop time
+    student.dropped = dropTime.toISOString();
+    student.status = 'Active';
+    student.updatedAt = dropTime;
+    await student.save();
+    
+    // Populate parents for notifications
+    await student.populate('parents');
+
+    // Update journey student status
+    const journeyStudent = activeJourney.students.find(
+      s => s.studentId.toString() === studentId
+    );
+    if (journeyStudent) {
+      journeyStudent.droppedAt = dropTime;
+      journeyStudent.status = 'dropped';
+      activeJourney.updatedAt = dropTime;
+      await activeJourney.save();
     }
 
     // Create notifications for parents
@@ -805,9 +706,10 @@ router.post('/student/drop', async (req, res) => {
     });
 
     res.json({
+      success: true,
       message: 'Student marked as dropped',
       student: {
-        id: student._id,
+        id: student._id.toString(),
         name: student.name,
         dropped: student.dropped
       }
@@ -818,274 +720,26 @@ router.post('/student/drop', async (req, res) => {
 });
 
 // End journey/trip
-router.post('/journey/end', async (req, res) => {
-  try {
-    if (req.userRole !== 'driver') {
-      return res.status(403).json({ 
-        success: false,
-        message: 'Access denied',
-        error: 'ACCESS_DENIED'
-      });
-    }
-
-    const driver = await Driver.findById(req.user._id).populate('currentRoute');
-    
-    if (!driver.currentRoute) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'No route assigned to driver',
-        error: 'NO_ROUTE_ASSIGNED'
-      });
-    }
-
-    const route = await Route.findById(driver.currentRoute._id);
-
-    // Store journey type before clearing driver data
-    const journeyType = driver.journeyType || (new Date().getHours() < 12 ? 'pickup' : 'drop-off');
-
-    // Update Journey record if exists
-    const endedAt = new Date();
-    if (driver.currentJourneyId) {
-      // Get current student pickup/drop times from Student model
-      const routeWithStudents = await Route.findById(route._id).populate('students');
-      
-      // Update each student in the journey
-      for (const student of routeWithStudents.students) {
-        const updateData = {};
-        if (student.pickup) {
-          updateData['students.$.pickedUpAt'] = new Date(student.pickup);
-          if (student.dropped) {
-            updateData['students.$.droppedAt'] = new Date(student.dropped);
-            updateData['students.$.status'] = 'dropped';
-          } else {
-            updateData['students.$.status'] = 'picked_up';
-          }
-        } else if (student.dropped) {
-          updateData['students.$.droppedAt'] = new Date(student.dropped);
-          updateData['students.$.status'] = 'dropped';
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await Journey.updateOne(
-            { _id: driver.currentJourneyId, 'students.studentId': student._id },
-            { $set: updateData }
-          );
-        }
-      }
-
-      // Mark journey as completed
-      await Journey.findByIdAndUpdate(
-        driver.currentJourneyId,
-        {
-          status: 'completed',
-          endedAt: endedAt
-        }
-      );
-    }
-
-    // Update driver journey status
-    driver.journeyStatus = 'completed';
-    driver.currentJourneyId = null; // Clear current journey reference
-    await driver.save();
-
-    // Get Socket.io instance
-    const io = getSocketIO();
-    
-    // Create notification message based on journey type
-    const notificationMessage = journeyType === 'pickup'
-      ? `🏁 The bus has completed the morning pickup journey. Route: ${route.name}`
-      : `🏁 The bus has completed the afternoon drop-off journey. Route: ${route.name}`;
-
-    // Get all parents on the route for notifications
-    const routeWithStudents = await Route.findById(route._id)
-      .populate({
-        path: 'students',
-        populate: {
-          path: 'parents',
-          select: 'name email phone deviceToken'
-        }
-      });
-
-    // Collect all unique parent IDs and device tokens
-    const parentIds = new Set();
-    const parentDeviceTokens = [];
-    
-    routeWithStudents.students.forEach(student => {
-      if (student.parents && student.parents.length > 0) {
-        student.parents.forEach(parent => {
-          parentIds.add(parent._id);
-          
-          // Collect device tokens (filter out placeholders)
-          if (parent.deviceToken && 
-              parent.deviceToken.trim() !== '' && 
-              parent.deviceToken.length > 50 &&
-              parent.deviceToken.toLowerCase() !== 'device_token') {
-            parentDeviceTokens.push(parent.deviceToken);
-          }
-        });
-      }
-    });
-
-    // Remove duplicate tokens
-    const uniqueTokens = [...new Set(parentDeviceTokens)];
-
-    // Create database notifications for all parents
-    const notifications = [];
-    for (const parentId of parentIds) {
-      const notification = await Notification.create({
-        pid: parentId,
-        sid: route.sid,
-        message: notificationMessage,
-        type: 'journey_ended',
-        routeId: route._id
-      });
-      notifications.push(notification);
-    }
-
-    // Send real-time notifications via Socket.io
-    const notificationData = {
-      type: 'journey_ended',
-      routeId: route._id,
-      routeName: route.name,
-      driverId: driver._id,
-      driverName: driver.name,
-      journeyType: journeyType,
-      message: notificationMessage,
-      timestamp: new Date().toISOString()
-    };
-
-    // Emit to all parents on the route
-    parentIds.forEach(parentId => {
-      io.to(`parent:${parentId}`).emit('notification', notificationData);
-    });
-
-    // Emit journey end to route room
-    io.to(`route:${route._id}`).emit('journey-ended', notificationData);
-
-    // Send FCM push notifications to all parents
-    if (uniqueTokens.length > 0) {
-      try {
-        const fcmResult = await sendPushNotification(
-          uniqueTokens,
-          notificationMessage,
-          {
-            type: 'journey_ended',
-            routeId: route._id.toString(),
-            routeName: route.name,
-            journeyType: journeyType,
-            driverId: driver._id.toString(),
-            driverName: driver.name
-          },
-          '🏁 Journey Completed'
-        );
-        
-        if (!fcmResult.success && fcmResult.error === 'FCM_API_NOT_ENABLED') {
-          console.warn('⚠️  FCM API not enabled. Notifications saved to database but push notifications disabled.');
-        } else if (fcmResult.success) {
-          console.log(`✅ FCM: Journey end notifications sent - ${fcmResult.successCount} successful, ${fcmResult.failureCount} failed`);
-        }
-      } catch (fcmError) {
-        console.error('Error sending FCM notification for journey end:', fcmError.message || fcmError);
-        // Don't fail the request if FCM fails
-      }
-    } else {
-      console.log(`ℹ️  No device tokens found for parents on route ${route.name}. Notifications saved to database.`);
-    }
-
-    res.json({
-      success: true,
-      message: 'Journey ended successfully',
-      journeyType: journeyType,
-      route: {
-        id: route._id,
-        name: route.name
-      },
-      studentsCount: routeWithStudents.students.length,
-      notificationsSent: notifications.length,
-      fcmNotificationsSent: uniqueTokens.length,
-      journeyStatus: 'completed'
-    });
-  } catch (error) {
-    console.error('Error ending journey:', error);
-    res.status(500).json({ 
+router.post('/journey/end', (req, res, next) => {
+  if (req.userRole !== 'driver') {
+    return res.status(403).json({ 
       success: false,
-      message: 'Server error',
-      error: error.message 
+      message: 'Access denied' 
     });
   }
-});
+  next();
+}, journeyController.endJourney);
 
-// Get journey status (students picked/dropped count)
-router.get('/journey/status', async (req, res) => {
-  try {
-    if (req.userRole !== 'driver') {
-      return res.status(403).json({ 
-        success: false,
-        message: 'Access denied',
-        error: 'ACCESS_DENIED'
-      });
-    }
-
-    const driver = await Driver.findById(req.user._id).populate('currentRoute');
-    
-    if (!driver.currentRoute) {
-      return res.json({
-        success: true,
-        message: 'No route assigned',
-        route: null,
-        status: null,
-        journeyStatus: driver.journeyStatus || 'idle'
-      });
-    }
-
-    const route = await Route.findById(driver.currentRoute._id).populate('students');
-    
-    const hour = new Date().getHours();
-    const isMorning = hour < 12;
-
-    let total = route.students.length;
-    let completed = 0;
-
-    if (isMorning) {
-      completed = route.students.filter(s => s.pickup).length;
-    } else {
-      completed = route.students.filter(s => s.dropped).length;
-    }
-
-    const students = route.students.map(student => ({
-      id: student._id,
-      name: student.name,
-      pickup: student.pickup,
-      dropped: student.dropped,
-      status: student.status
-    }));
-
-    res.json({
-      success: true,
-      message: 'success',
-      route: {
-        id: route._id,
-        name: route.name
-      },
-      journeyType: isMorning ? 'pickup' : 'drop-off',
-      journeyStatus: driver.journeyStatus || 'idle',
-      status: {
-        total,
-        completed,
-        remaining: total - completed,
-        progress: total > 0 ? Math.round((completed / total) * 100) : 0
-      },
-      students
-    });
-  } catch (error) {
-    console.error('Error fetching journey status:', error);
-    res.status(500).json({ 
+// Get journey status
+router.get('/journey/status', (req, res, next) => {
+  if (req.userRole !== 'driver') {
+    return res.status(403).json({ 
       success: false,
-      message: 'Server error',
-      error: error.message 
+      message: 'Access denied' 
     });
   }
-});
+  next();
+}, journeyController.getJourneyStatus);
 
 // Get driver journey history
 router.get('/journey/history', async (req, res) => {
