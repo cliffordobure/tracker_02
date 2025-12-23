@@ -16,6 +16,71 @@ const { getSocketIO } = require('../services/socketService');
 
 router.use(authenticate);
 
+// Helper function to format route stops for blue line display
+const formatRouteStops = (stops) => {
+  if (!stops || !Array.isArray(stops) || stops.length === 0) {
+    return [];
+  }
+
+  // Sort stops by order if available
+  const sortedStops = [...stops].sort((a, b) => {
+    const orderA = a.order !== undefined ? a.order : 0;
+    const orderB = b.order !== undefined ? b.order : 0;
+    return orderA - orderB;
+  });
+
+  // Format stops with proper coordinate handling
+  return sortedStops.map(stop => {
+    // Ensure coordinates are numbers, support both latitude/longitude and lat/lng
+    const lat = parseFloat(stop.latitude) || parseFloat(stop.lat) || null;
+    const lng = parseFloat(stop.longitude) || parseFloat(stop.lng) || parseFloat(stop.lon) || null;
+
+    return {
+      latitude: lat,
+      longitude: lng,
+      // Also include lat/lng for compatibility
+      lat: lat,
+      lng: lng,
+      name: stop.name || stop.address || '',
+      address: stop.address || '',
+      description: stop.description || '',
+      order: stop.order !== undefined ? stop.order : 0
+    };
+  }).filter(stop => stop.latitude !== null && stop.longitude !== null); // Filter out stops without valid coordinates
+};
+
+// Helper function to format route object with stops for blue line display
+const formatRoute = (route) => {
+  if (!route) {
+    return null;
+  }
+
+  const formattedStops = formatRouteStops(route.stops);
+
+  return {
+    _id: route._id.toString(),
+    id: route._id.toString(),
+    name: route.name,
+    stops: formattedStops,
+    // Include waypoints and points as fallback (same as stops)
+    waypoints: formattedStops.length > 0 ? formattedStops : [],
+    points: formattedStops.length > 0 ? formattedStops : [],
+    // Keep driver info for backward compatibility
+    driver: route.driver ? {
+      id: route.driver._id,
+      name: route.driver.name,
+      phone: route.driver.phone,
+      photo: route.driver.photo,
+      vehicleNumber: route.driver.vehicleNumber,
+      location: {
+        latitude: route.driver.latitude,
+        longitude: route.driver.longitude,
+        ...(route.driver.updatedAt && { timestamp: route.driver.updatedAt })
+      }
+    } : null
+  };
+};
+
 // Get parent profile
 router.get('/profile', async (req, res) => {
   try {
@@ -159,8 +224,22 @@ router.get('/students', async (req, res) => {
         }
       }
 
+      // Format route with properly formatted stops for blue line display
+      const formattedRoute = formatRoute(student.route);
+      
+      // Add debug logging for route stops
+      if (formattedRoute) {
+        console.log(`[ParentController] Student ${student.name} route:`, formattedRoute.name);
+        console.log(`[ParentController] Route stops count:`, formattedRoute.stops?.length || 0);
+        if (formattedRoute.stops && formattedRoute.stops.length > 0) {
+          console.log(`[ParentController] First stop:`, formattedRoute.stops[0]);
+          console.log(`[ParentController] Last stop:`, formattedRoute.stops[formattedRoute.stops.length - 1]);
+        }
+      }
+
       return {
-        id: student._id,
+        id: student._id.toString(),
+        _id: student._id.toString(),
         name: student.name,
         photo: student.photo,
         grade: student.grade,
@@ -169,7 +248,7 @@ router.get('/students', async (req, res) => {
         longitude: student.longitude,
         pickup: student.pickup,
         dropped: student.dropped,
-        status: student.status,
+        status: student.status || 'active',
         // Driver info at student level (for mobile app compatibility)
         driverId: driver ? driver._id.toString() : null,
         driverName: driver ? driver.name : null,
@@ -177,28 +256,14 @@ router.get('/students', async (req, res) => {
         // Teacher info at student level (for mobile app compatibility)
         teacherId: teacher ? teacher._id.toString() : null,
         teacherName: teacher ? teacher.name : null,
-        // Route info (kept for backward compatibility)
-        route: student.route ? {
-          id: student.route._id,
-          name: student.route.name,
-          driver: student.route.driver ? {
-            id: student.route.driver._id,
-            name: student.route.driver.name,
-            phone: student.route.driver.phone,
-            photo: student.route.driver.photo,
-            vehicleNumber: student.route.driver.vehicleNumber,
-            location: {
-              latitude: student.route.driver.latitude,
-              longitude: student.route.driver.longitude
-            }
-          } : null,
-          stops: student.route.stops || []
-        } : null
+        // Route info with properly formatted stops for blue line display
+        route: formattedRoute
       };
     }));
 
     res.json({
-      message: 'success',
+      success: true,
+      message: 'Students retrieved successfully',
       data: studentsData
     });
   } catch (error) {
@@ -250,23 +315,7 @@ router.get('/students/:studentId/status', async (req, res) => {
         pickup: student.pickup,
         dropped: student.dropped,
         status: student.status,
-        route: student.route ? {
-          id: student.route._id,
-          name: student.route.name,
-          driver: student.route.driver ? {
-            id: student.route.driver._id,
-            name: student.route.driver.name,
-            phone: student.route.driver.phone,
-            photo: student.route.driver.photo,
-            vehicleNumber: student.route.driver.vehicleNumber,
-            location: {
-              latitude: student.route.driver.latitude,
-              longitude: student.route.driver.longitude,
-              timestamp: student.route.driver.updatedAt
-            }
-          } : null,
-          stops: student.route.stops || []
-        } : null
+        route: formatRoute(student.route)
       }
     });
   } catch (error) {
