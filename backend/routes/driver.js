@@ -12,6 +12,118 @@ const { sendPushNotification } = require('../services/firebaseService');
 
 router.use(authenticate);
 
+// Get driver profile
+router.get('/profile', async (req, res) => {
+  try {
+    if (req.userRole !== 'driver') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied' 
+      });
+    }
+
+    const driver = await Driver.findById(req.user._id).select('-password');
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: 'Driver not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: driver._id.toString(),
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone || null,
+        photo: driver.photo || null,
+        vehicle: driver.vehicleNumber,
+        vehicleNumber: driver.vehicleNumber,
+        role: 'driver',
+        sid: driver.sid ? driver.sid.toString() : null,
+        currentRoute: driver.currentRoute ? driver.currentRoute.toString() : null,
+        status: driver.status
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Update driver profile
+router.put('/profile', async (req, res) => {
+  try {
+    if (req.userRole !== 'driver') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied' 
+      });
+    }
+
+    const driverId = req.user._id;
+    const { name, email, phone, photo, deviceToken } = req.body;
+
+    const driver = await Driver.findById(driverId);
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: 'Driver not found'
+      });
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (email && email !== driver.email) {
+      const existingDriver = await Driver.findOne({ email });
+      if (existingDriver) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email already exists'
+        });
+      }
+      driver.email = email;
+    }
+
+    if (name) driver.name = name;
+    if (phone !== undefined) driver.phone = phone;
+    if (photo) driver.photo = photo;
+    if (deviceToken) driver.deviceToken = deviceToken;
+    driver.updatedAt = new Date();
+
+    await driver.save();
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: driver._id.toString(),
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone || null,
+        photo: driver.photo || null,
+        vehicle: driver.vehicleNumber,
+        vehicleNumber: driver.vehicleNumber,
+        role: 'driver',
+        sid: driver.sid ? driver.sid.toString() : null,
+        currentRoute: driver.currentRoute ? driver.currentRoute.toString() : null,
+        status: driver.status
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
 // Get driver's current route and students
 router.get('/route', async (req, res) => {
   try {

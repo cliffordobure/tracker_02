@@ -342,7 +342,8 @@ router.post('/forgot-password', async (req, res) => {
     // Always respond with success message to avoid email enumeration
     if (!user) {
       return res.json({
-        message: 'If an account with that email exists, a password reset link has been sent.'
+        success: true,
+        message: 'If an account exists with that email, a password reset link has been sent'
       });
     }
 
@@ -391,10 +392,10 @@ router.post('/forgot-password', async (req, res) => {
     }
 
     res.json({
-      message: 'If an account with that email exists, a password reset link has been sent.',
+      success: true,
+      message: 'Password reset link sent to your email',
       // In development, return token & URL to simplify testing
-      token: process.env.NODE_ENV === 'development' ? token : undefined,
-      resetUrl: process.env.NODE_ENV === 'development' ? resetUrl : undefined
+      ...(process.env.NODE_ENV === 'development' && { token, resetUrl })
     });
   } catch (error) {
     console.error('Error in forgot-password:', error);

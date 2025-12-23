@@ -23,22 +23,12 @@ router.get('/profile', async (req, res) => {
     const parentId = req.user._id;
 
     // Query database for parent
-    const parent = await Parent.findById(parentId).select('_id name email phone photo sid status');
+    const parent = await Parent.findById(parentId).select('-password');
 
     if (!parent) {
       return res.status(404).json({
         success: false,
-        message: 'Parent profile not found',
-        error: 'User not found'
-      });
-    }
-
-    // Check if parent is active (default to 'Active' if status is null/undefined)
-    if (parent.status && parent.status !== 'Active') {
-      return res.status(403).json({
-        success: false,
-        message: 'Parent account is suspended',
-        error: 'Account suspended'
+        message: 'Parent not found'
       });
     }
 
@@ -55,7 +45,7 @@ router.get('/profile', async (req, res) => {
       }
     }
 
-    // Return profile in specified format (support both 'user' and 'parent_user' for backward compatibility)
+    // Return profile in specified format
     const profileData = {
       id: parent._id.toString(),
       name: parent.name,
@@ -68,16 +58,13 @@ router.get('/profile', async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Profile retrieved successfully',
-      user: profileData,
-      // Also include parent_user for backward compatibility
-      parent_user: profileData
+      user: profileData
     });
   } catch (error) {
     console.error('Error fetching parent profile:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error',
+      message: 'Server error',
       error: error.message
     });
   }
@@ -491,42 +478,64 @@ router.get('/students/:studentId/driver-location', async (req, res) => {
 // Update parent profile
 router.put('/profile', async (req, res) => {
   try {
-    const { name, email, photo, phone, deviceToken } = req.body;
-    const parent = await Parent.findById(req.user._id);
+    const parentId = req.user._id;
+    const { name, email, phone, photo, deviceToken } = req.body;
+
+    const parent = await Parent.findById(parentId);
 
     if (!parent) {
-      return res.status(404).json({ message: 'Parent not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Parent not found'
+      });
     }
 
-    if (name) parent.name = name;
+    // Check if email is being changed and if it's already taken
     if (email && email !== parent.email) {
       const existingParent = await Parent.findOne({ email });
       if (existingParent) {
-        return res.status(400).json({ message: 'Email already exists' });
+        return res.status(400).json({
+          success: false,
+          message: 'Email already exists'
+        });
       }
       parent.email = email;
     }
-    if (photo) parent.photo = photo;
+
+    if (name) parent.name = name;
     if (phone !== undefined) parent.phone = phone;
+    if (photo) parent.photo = photo;
     if (deviceToken) parent.deviceToken = deviceToken;
-    parent.updatedAt = Date.now();
+    parent.updatedAt = new Date();
 
     await parent.save();
-    const parentData = parent.toObject();
-    delete parentData.password;
+
+    // Build full photo URL if photo exists
+    let photoUrl = parent.photo || null;
+    if (photoUrl && !photoUrl.startsWith('http://') && !photoUrl.startsWith('https://')) {
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      photoUrl = `${baseUrl}${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
+    }
 
     res.json({
+      success: true,
       message: 'Profile updated successfully',
       user: {
-        id: parentData._id,
-        name: parentData.name,
-        email: parentData.email,
-        photo: parentData.photo,
-        phone: parentData.phone
+        id: parent._id.toString(),
+        name: parent.name,
+        email: parent.email,
+        phone: parent.phone || null,
+        photo: photoUrl,
+        role: 'parent',
+        sid: parent.sid ? parent.sid.toString() : null
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
   }
 });
 
