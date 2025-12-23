@@ -32,11 +32,23 @@ exports.startJourney = async (req, res) => {
     });
 
     if (activeJourney) {
-      return res.status(400).json({
-        success: false,
-        message: 'You already have an active trip. Please end the current trip before starting a new one.',
-        activeJourneyId: activeJourney._id
-      });
+      // Optional: Auto-cleanup if journey is older than 24 hours
+      const hoursSinceStart = (Date.now() - activeJourney.startedAt.getTime()) / (1000 * 60 * 60);
+      if (hoursSinceStart > 24) {
+        // Auto-end old stuck journeys
+        activeJourney.status = 'completed';
+        activeJourney.endedAt = new Date();
+        activeJourney.updatedAt = new Date();
+        await activeJourney.save();
+        console.log(`Auto-ended stuck journey ${activeJourney._id} (${hoursSinceStart.toFixed(1)} hours old)`);
+      } else {
+        // Journey is recent, require manual end
+        return res.status(400).json({
+          success: false,
+          message: 'You already have an active trip. Please end the current trip before starting a new one.',
+          activeJourneyId: activeJourney._id
+        });
+      }
     }
 
     // Use mobile phone time if provided, otherwise use server time (fallback)
@@ -79,13 +91,13 @@ exports.startJourney = async (req, res) => {
       // Reset pickup times for morning pickup
       await Student.updateMany(
         { route: driver.currentRoute._id },
-        { $set: { pickup: '' } }
+        { $set: { pickup: null } }
       );
     } else {
       // Reset drop times for afternoon drop-off
       await Student.updateMany(
         { route: driver.currentRoute._id },
-        { $set: { dropped: '' } }
+        { $set: { dropped: null } }
       );
     }
 
