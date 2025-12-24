@@ -163,22 +163,20 @@ const TrackingReport = () => {
                       <tr key={driver._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center space-x-3">
-                            {driver.photo ? (
+                            {driver.photo && driver.photo.trim() ? (
                               <img 
                                 src={driver.photo.startsWith('http') ? driver.photo : `http://localhost:5000${driver.photo}`} 
                                 alt={driver.name}
                                 className="w-10 h-10 rounded-full object-cover"
                                 onError={(e) => {
-                                  e.target.style.display = 'none'
-                                  e.target.nextSibling.style.display = 'flex'
+                                  e.target.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23ddd'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='16' fill='%23999'%3E${driver.name?.charAt(0)?.toUpperCase() || 'D'}%3C/text%3E%3C/svg%3E`
                                 }}
                               />
-                            ) : null}
-                            <div 
-                              className={`w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm ${driver.photo ? 'hidden' : ''}`}
-                            >
-                              {driver.name?.charAt(0)?.toUpperCase() || 'D'}
-                            </div>
+                            ) : (
+                              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                {driver.name?.charAt(0)?.toUpperCase() || 'D'}
+                              </div>
+                            )}
                             <div>
                               <div className="text-sm font-medium text-gray-900">{driver.name}</div>
                               <div className="text-xs text-gray-500">{driver.email}</div>
