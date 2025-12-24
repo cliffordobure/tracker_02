@@ -92,16 +92,63 @@ router.get('/route', async (req, res) => {
         select: 'name address latitude longitude order'
       });
 
-    // Query students directly by route ID instead of relying on Route's students array
-    // This ensures we get all students assigned to this route
-    const activeStudents = await Student.find({
-      route: driver.currentRoute._id,
+    // Query students in two ways to ensure we get all students:
+    // 1. Students where route field matches the route ID
+    // 2. Students whose ID is in the Route's students array
+    // This handles cases where students are assigned via Route.students but Student.route is not set
+    const routeId = driver.currentRoute._id;
+    
+    // Get route with students populated to check Route.students array
+    const routeWithStudents = await Route.findById(routeId)
+      .select('students')
+      .lean();
+    
+    const routeStudentIds = routeWithStudents?.students || [];
+    
+    // Build query to find students by either method
+    const query = {
+      $or: [
+        { route: routeId }, // Students with route field set
+        ...(routeStudentIds.length > 0 ? [{ _id: { $in: routeStudentIds } }] : []) // Students in Route's students array
+      ],
       isdelete: false,
       status: { $ne: 'Leave' }
-    })
+    };
+    
+    // If no students in Route.students array, only query by route field
+    if (routeStudentIds.length === 0) {
+      delete query.$or;
+      query.route = routeId;
+    }
+    
+    const activeStudents = await Student.find(query)
       .select('name photo grade address latitude longitude pickup dropped status parents')
       .populate('parents', 'name email phone deviceToken')
       .sort({ name: 1 });
+    
+    // Debug logging
+    console.log(`🔍 Driver Route Query Debug:`);
+    console.log(`   Route ID: ${routeId}`);
+    console.log(`   Route.students array length: ${routeStudentIds.length}`);
+    console.log(`   Found ${activeStudents.length} active students`);
+    if (activeStudents.length === 0) {
+      // Check if there are any students at all for this route (including deleted/on leave)
+      const allStudents = await Student.find({
+        $or: [
+          { route: routeId },
+          ...(routeStudentIds.length > 0 ? [{ _id: { $in: routeStudentIds } }] : [])
+        ]
+      }).select('name status isdelete route').lean();
+      console.log(`   Total students (including deleted/on leave): ${allStudents.length}`);
+      if (allStudents.length > 0) {
+        console.log(`   Students found:`, allStudents.map(s => ({
+          name: s.name,
+          status: s.status,
+          isdelete: s.isdelete,
+          route: s.route
+        })));
+      }
+    }
 
     res.json({
       message: 'success',
