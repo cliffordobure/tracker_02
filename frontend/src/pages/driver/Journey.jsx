@@ -78,9 +78,15 @@ const Journey = () => {
     )
   }
 
-  const pendingStudents = students.filter(s => s.status === 'pending' || !s.status)
-  const pickedUpStudents = students.filter(s => s.status === 'picked_up')
-  const droppedStudents = students.filter(s => s.status === 'dropped')
+  // Include 'Active' status students in pending (they haven't been picked up yet)
+  const pendingStudents = students.filter(s => 
+    s.status === 'pending' || 
+    !s.status || 
+    s.status === 'Active' ||
+    (s.status !== 'picked_up' && s.status !== 'dropped' && !s.pickup && !s.dropped)
+  )
+  const pickedUpStudents = students.filter(s => s.status === 'picked_up' || (s.pickup && !s.dropped))
+  const droppedStudents = students.filter(s => s.status === 'dropped' || s.dropped)
 
   return (
     <DriverLayout>
