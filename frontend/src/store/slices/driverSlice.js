@@ -73,6 +73,18 @@ export const dropStudent = createAsyncThunk(
   }
 )
 
+export const fetchJourneyStatus = createAsyncThunk(
+  'driver/journey/status',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/driver/journey/status')
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch journey status')
+    }
+  }
+)
+
 export const fetchJourneyHistory = createAsyncThunk(
   'driver/journey/history',
   async ({ page = 1, limit = 20, startDate, endDate }, { rejectWithValue }) => {
@@ -174,6 +186,14 @@ const driverSlice = createSlice({
         if (student) {
           student.status = 'dropped'
           student.dropped = new Date().toISOString()
+        }
+      })
+      // Fetch Journey Status
+      .addCase(fetchJourneyStatus.fulfilled, (state, action) => {
+        if (action.payload.hasActiveJourney && action.payload.journey) {
+          state.currentJourney = action.payload.journey
+        } else {
+          state.currentJourney = null
         }
       })
       // Journey History

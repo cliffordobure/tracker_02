@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchRoute, startJourney, endJourney, pickupStudent, dropStudent } from '../../store/slices/driverSlice'
+import { fetchRoute, fetchJourneyStatus, startJourney, endJourney, pickupStudent, dropStudent } from '../../store/slices/driverSlice'
 import DriverLayout from '../../components/layouts/DriverLayout'
 import toast from 'react-hot-toast'
 import { BACKEND_URL } from '../../config/api'
@@ -10,22 +10,38 @@ const Journey = () => {
   const { route, students, loading, journeyLoading, currentJourney } = useSelector((state) => state.driver)
   const [journeyType, setJourneyType] = useState('pickup')
   const [isJourneyActive, setIsJourneyActive] = useState(false)
+  const [hasActiveJourneyError, setHasActiveJourneyError] = useState(false)
 
   useEffect(() => {
     dispatch(fetchRoute())
+    dispatch(fetchJourneyStatus()) // Check for active journey on mount
   }, [dispatch])
 
   useEffect(() => {
     // Check if there's an active journey
-    setIsJourneyActive(!!currentJourney)
+    if (currentJourney) {
+      setIsJourneyActive(true)
+      setHasActiveJourneyError(false)
+    } else {
+      setIsJourneyActive(false)
+    }
   }, [currentJourney])
 
   const handleStartJourney = async () => {
     try {
       await dispatch(startJourney({ journeyType })).unwrap()
       setIsJourneyActive(true)
+      setHasActiveJourneyError(false)
       toast.success('Journey started successfully')
+      // Refresh journey status
+      dispatch(fetchJourneyStatus())
     } catch (error) {
+      // Check if error is about active journey
+      if (error && (error.includes('active trip') || error.includes('active journey'))) {
+        setHasActiveJourneyError(true)
+        // Refresh journey status to get the active journey
+        dispatch(fetchJourneyStatus())
+      }
       toast.error(error || 'Failed to start journey')
     }
   }
@@ -37,8 +53,10 @@ const Journey = () => {
     try {
       await dispatch(endJourney()).unwrap()
       setIsJourneyActive(false)
+      setHasActiveJourneyError(false)
       toast.success('Journey ended successfully')
       dispatch(fetchRoute()) // Refresh route data
+      dispatch(fetchJourneyStatus()) // Refresh journey status
     } catch (error) {
       toast.error(error || 'Failed to end journey')
     }
@@ -100,7 +118,48 @@ const Journey = () => {
         {/* Journey Control */}
         <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 md:p-6 mb-4 sm:mb-6 md:mb-8">
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Journey Control</h2>
-          {!isJourneyActive ? (
+          {(hasActiveJourneyError || isJourneyActive) ? (
+            <div className="space-y-4">
+              {hasActiveJourneyError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-red-900">Active Journey Detected</p>
+                      <p className="text-sm text-red-700 mt-1">
+                        You have an active journey. Please end it before starting a new one.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleEndJourney}
+                      disabled={journeyLoading}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base"
+                    >
+                      {journeyLoading ? 'Ending...' : 'End Active Journey'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {isJourneyActive && !hasActiveJourneyError && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-green-900">Journey Active</p>
+                      <p className="text-sm text-green-700 mt-1">
+                        Type: {currentJourney?.journeyType === 'pickup' ? 'Pickup' : currentJourney?.journeyType === 'drop-off' ? 'Drop-off' : journeyType === 'pickup' ? 'Pickup' : 'Drop-off'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleEndJourney}
+                      disabled={journeyLoading}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base"
+                    >
+                      {journeyLoading ? 'Ending...' : 'End Journey'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Journey Type</label>
