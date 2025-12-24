@@ -195,19 +195,25 @@ exports.markStudentPickedUp = async (req, res) => {
     }
 
     const route = await Route.findById(driver.currentRoute._id);
-    if (!route.students.includes(studentId)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Student is not on your route'
-      });
-    }
-
+    
+    // Check if student is on route - either in Route.students array or Student.route field
     const student = await Student.findById(studentId);
-
     if (!student) {
       return res.status(404).json({
         success: false,
         message: 'Student not found'
+      });
+    }
+    
+    const routeIdString = driver.currentRoute._id.toString();
+    const studentIdString = studentId.toString();
+    const isStudentOnRoute = route.students.some(id => id.toString() === studentIdString) || 
+                             (student.route && student.route.toString() === routeIdString);
+    
+    if (!isStudentOnRoute) {
+      return res.status(403).json({
+        success: false,
+        message: 'Student is not on your route'
       });
     }
 
@@ -378,19 +384,25 @@ exports.markStudentDropped = async (req, res) => {
     }
 
     const route = await Route.findById(driver.currentRoute._id);
-    if (!route.students.includes(studentId)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Student is not on your route'
-      });
-    }
-
+    
+    // Check if student is on route - either in Route.students array or Student.route field
     const student = await Student.findById(studentId);
-
     if (!student) {
       return res.status(404).json({
         success: false,
         message: 'Student not found'
+      });
+    }
+    
+    const routeIdString = driver.currentRoute._id.toString();
+    const studentIdString = studentId.toString();
+    const isStudentOnRoute = route.students.some(id => id.toString() === studentIdString) || 
+                             (student.route && student.route.toString() === routeIdString);
+    
+    if (!isStudentOnRoute) {
+      return res.status(403).json({
+        success: false,
+        message: 'Student is not on your route'
       });
     }
 

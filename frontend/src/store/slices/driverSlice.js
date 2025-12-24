@@ -53,7 +53,7 @@ export const pickupStudent = createAsyncThunk(
   'driver/student/pickup',
   async (studentId, { rejectWithValue }) => {
     try {
-      const response = await api.post(`/driver/student/pickup/${studentId}`)
+      const response = await api.post('/driver/student/pickup', { studentId })
       return response.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to pickup student')
@@ -65,7 +65,7 @@ export const dropStudent = createAsyncThunk(
   'driver/student/drop',
   async (studentId, { rejectWithValue }) => {
     try {
-      const response = await api.post(`/driver/student/drop/${studentId}`)
+      const response = await api.post('/driver/student/drop', { studentId })
       return response.data
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to drop student')
