@@ -78,7 +78,7 @@ const AdminLayout = ({ children }) => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
               <img src={logo} alt="Logo" className="h-10 w-10 object-contain" />
-              <h1 className="text-2xl font-bold text-gray-800">Super Admin Dashboard</h1>
+              <h1 className="text-2xl font-bold text-gray-800">Super Admin</h1>
             </div>
             <div className="flex items-center space-x-4">
               <div className="text-right">
