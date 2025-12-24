@@ -83,9 +83,10 @@ const Journey = () => {
 
   const handlePickup = async (studentId) => {
     try {
-      await dispatch(pickupStudent(studentId)).unwrap()
+      const result = await dispatch(pickupStudent(studentId)).unwrap()
       toast.success('Student picked up')
-      dispatch(fetchRoute()) // Refresh route data
+      // Refresh route data to get updated student status
+      await dispatch(fetchRoute())
     } catch (error) {
       toast.error(error || 'Failed to pickup student')
     }
@@ -93,9 +94,10 @@ const Journey = () => {
 
   const handleDrop = async (studentId) => {
     try {
-      await dispatch(dropStudent(studentId)).unwrap()
+      const result = await dispatch(dropStudent(studentId)).unwrap()
       toast.success('Student dropped off')
-      dispatch(fetchRoute()) // Refresh route data
+      // Refresh route data to get updated student status
+      await dispatch(fetchRoute())
     } catch (error) {
       toast.error(error || 'Failed to drop student')
     }
@@ -115,15 +117,19 @@ const Journey = () => {
     )
   }
 
-  // Include 'Active' status students in pending (they haven't been picked up yet)
+  // Filter students based on pickup/dropped timestamps, not just status
+  // Backend returns status: 'Active' for all students, so we check pickup/dropped fields
   const pendingStudents = students.filter(s => 
-    s.status === 'pending' || 
-    !s.status || 
-    s.status === 'Active' ||
-    (s.status !== 'picked_up' && s.status !== 'dropped' && !s.pickup && !s.dropped)
+    !s.pickup && !s.dropped && 
+    s.status !== 'dropped' && 
+    s.status !== 'picked_up'
   )
-  const pickedUpStudents = students.filter(s => s.status === 'picked_up' || (s.pickup && !s.dropped))
-  const droppedStudents = students.filter(s => s.status === 'dropped' || s.dropped)
+  const pickedUpStudents = students.filter(s => 
+    s.pickup && !s.dropped
+  )
+  const droppedStudents = students.filter(s => 
+    s.dropped || s.status === 'dropped'
+  )
 
   return (
     <DriverLayout>
@@ -254,7 +260,7 @@ const Journey = () => {
                         {student.address && (
                           <p className="text-xs text-gray-600 mt-2 truncate">📍 {student.address}</p>
                         )}
-                        {isJourneyActive && (
+                        {isJourneyActive && !student.pickup && (
                           <button
                             onClick={() => handlePickup(student.id)}
                             className="w-full mt-3 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
@@ -306,7 +312,7 @@ const Journey = () => {
                             Picked up: {new Date(student.pickup).toLocaleTimeString()}
                           </p>
                         )}
-                        {isJourneyActive && (
+                        {isJourneyActive && student.pickup && !student.dropped && (
                           <button
                             onClick={() => handleDrop(student.id)}
                             className="w-full mt-3 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"

@@ -175,17 +175,33 @@ const driverSlice = createSlice({
       })
       // Pickup/Drop Student
       .addCase(pickupStudent.fulfilled, (state, action) => {
-        const student = state.students.find(s => s.id === action.payload.studentId)
+        const studentId = action.payload.student?.id || action.payload.studentId
+        const student = state.students.find(s => s.id === studentId || s.id === action.payload.student?._id)
         if (student) {
-          student.status = 'picked_up'
-          student.pickup = new Date().toISOString()
+          // Update based on backend response
+          if (action.payload.student?.pickup) {
+            student.pickup = action.payload.student.pickup
+          } else if (action.payload.pickup) {
+            student.pickup = action.payload.pickup
+          } else {
+            student.pickup = new Date().toISOString()
+          }
+          student.status = 'Active' // Backend sets status to 'Active' after pickup
         }
       })
       .addCase(dropStudent.fulfilled, (state, action) => {
-        const student = state.students.find(s => s.id === action.payload.studentId)
+        const studentId = action.payload.student?.id || action.payload.studentId
+        const student = state.students.find(s => s.id === studentId || s.id === action.payload.student?._id)
         if (student) {
-          student.status = 'dropped'
-          student.dropped = new Date().toISOString()
+          // Update based on backend response
+          if (action.payload.student?.dropped) {
+            student.dropped = action.payload.student.dropped
+          } else if (action.payload.dropped) {
+            student.dropped = action.payload.dropped
+          } else {
+            student.dropped = new Date().toISOString()
+          }
+          student.status = 'Active' // Backend sets status to 'Active' after drop
         }
       })
       // Fetch Journey Status
