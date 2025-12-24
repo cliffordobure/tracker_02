@@ -2,6 +2,9 @@ const Journey = require('../models/Journey');
 const Driver = require('../models/Driver');
 const Route = require('../models/Route');
 const Student = require('../models/Student');
+const Notification = require('../models/Notification');
+const { getSocketIO } = require('../services/socketService');
+const { sendPushNotification } = require('../services/firebaseService');
 
 // Start Journey
 exports.startJourney = async (req, res) => {
@@ -70,8 +73,22 @@ exports.startJourney = async (req, res) => {
     const hour = journeyStartTime.getHours();
     const journeyType = hour < 12 ? 'pickup' : 'drop-off';
 
-    // Get all students for this route
-    const students = await Student.find({ route: driver.currentRoute._id });
+    // Get all students for this route (excluding deleted and on leave)
+    const students = await Student.find({ 
+      route: driver.currentRoute._id,
+      isdelete: false,
+      status: { $ne: 'Leave' }
+    }).populate('parents', 'name email phone deviceToken');
+
+    // Filter students based on journey type - only notify parents of students not yet picked/dropped
+    let studentsToNotify = [];
+    if (journeyType === 'pickup') {
+      // For pickup: only notify parents of students who haven't been picked up yet
+      studentsToNotify = students.filter(student => !student.pickup);
+    } else {
+      // For drop-off: only notify parents of students who haven't been dropped yet
+      studentsToNotify = students.filter(student => !student.dropped);
+    }
 
     // Create journey with student list
     const journey = new Journey({
@@ -103,6 +120,70 @@ exports.startJourney = async (req, res) => {
 
     await journey.save();
 
+    // Send notifications only to parents of students who haven't been picked/dropped yet
+    const io = getSocketIO();
+    const notificationMessage = journeyType === 'pickup' 
+      ? `🚌 The bus is now leaving school for morning pickup. Route: ${driver.currentRoute.name}`
+      : `🚌 The bus is now leaving school for afternoon drop-off. Route: ${driver.currentRoute.name}`;
+    
+    const parentDeviceTokens = [];
+    const parentIds = new Set(); // Track unique parent IDs to avoid duplicate notifications
+
+    for (const student of studentsToNotify) {
+      if (student.parents && student.parents.length > 0) {
+        for (const parent of student.parents) {
+          // Only send notification once per parent (in case parent has multiple students)
+          if (!parentIds.has(parent._id.toString())) {
+            parentIds.add(parent._id.toString());
+
+            // Create notification record
+            await Notification.create({
+              pid: parent._id,
+              sid: driver.sid,
+              message: notificationMessage,
+              type: 'journey_started',
+              routeId: driver.currentRoute._id
+            });
+
+            // Send real-time notification via Socket.io
+            io.to(`parent:${parent._id}`).emit('notification', {
+              type: 'journey_started',
+              routeId: driver.currentRoute._id.toString(),
+              routeName: driver.currentRoute.name,
+              journeyType: journeyType,
+              driverId: driverId.toString(),
+              driverName: driver.name,
+              timestamp: new Date().toISOString()
+            });
+
+            // Collect device tokens for FCM
+            if (parent.deviceToken && parent.deviceToken.trim() !== '') {
+              parentDeviceTokens.push(parent.deviceToken);
+            }
+          }
+        }
+      }
+    }
+
+    // Send FCM push notifications (async, don't wait)
+    if (parentDeviceTokens.length > 0) {
+      sendPushNotification(
+        parentDeviceTokens,
+        notificationMessage,
+        {
+          type: 'journey_started',
+          routeId: driver.currentRoute._id.toString(),
+          routeName: driver.currentRoute.name,
+          journeyType: journeyType,
+          driverId: driverId.toString(),
+          driverName: driver.name
+        },
+        '🚌 Journey Started'
+      ).catch(error => {
+        console.error('Error sending FCM notifications for journey start:', error);
+      });
+    }
+
     res.json({
       success: true,
       message: 'Journey started successfully',
@@ -112,6 +193,7 @@ exports.startJourney = async (req, res) => {
         name: driver.currentRoute.name
       },
       studentsCount: students.length,
+      notificationsSent: parentIds.size,
       journeyStatus: 'active',
       startedAt: journey.startedAt
     });
@@ -164,6 +246,77 @@ exports.endJourney = async (req, res) => {
     journey.updatedAt = new Date();
     await journey.save();
 
+    // Get route and driver info for notifications
+    const route = await Route.findById(journey.routeId);
+    const driver = await Driver.findById(driverId);
+
+    // Get all students for this route (excluding deleted and on leave)
+    const students = await Student.find({ 
+      route: journey.routeId,
+      isdelete: false,
+      status: { $ne: 'Leave' }
+    }).populate('parents', 'name email phone deviceToken');
+
+    // Send notifications only to parents of students on this route
+    const io = getSocketIO();
+    const notificationMessage = `✅ The bus journey has ended. Route: ${route?.name || 'Unknown'}`;
+    
+    const parentDeviceTokens = [];
+    const parentIds = new Set(); // Track unique parent IDs to avoid duplicate notifications
+
+    for (const student of students) {
+      if (student.parents && student.parents.length > 0) {
+        for (const parent of student.parents) {
+          // Only send notification once per parent (in case parent has multiple students)
+          if (!parentIds.has(parent._id.toString())) {
+            parentIds.add(parent._id.toString());
+
+            // Create notification record
+            await Notification.create({
+              pid: parent._id,
+              sid: driver?.sid,
+              message: notificationMessage,
+              type: 'journey_ended',
+              routeId: journey.routeId
+            });
+
+            // Send real-time notification via Socket.io
+            io.to(`parent:${parent._id}`).emit('notification', {
+              type: 'journey_ended',
+              routeId: journey.routeId.toString(),
+              routeName: route?.name || 'Unknown',
+              driverId: driverId.toString(),
+              driverName: driver?.name || 'Driver',
+              timestamp: new Date().toISOString()
+            });
+
+            // Collect device tokens for FCM
+            if (parent.deviceToken && parent.deviceToken.trim() !== '') {
+              parentDeviceTokens.push(parent.deviceToken);
+            }
+          }
+        }
+      }
+    }
+
+    // Send FCM push notifications (async, don't wait)
+    if (parentDeviceTokens.length > 0) {
+      sendPushNotification(
+        parentDeviceTokens,
+        notificationMessage,
+        {
+          type: 'journey_ended',
+          routeId: journey.routeId.toString(),
+          routeName: route?.name || 'Unknown',
+          driverId: driverId.toString(),
+          driverName: driver?.name || 'Driver'
+        },
+        '✅ Journey Ended'
+      ).catch(error => {
+        console.error('Error sending FCM notifications for journey end:', error);
+      });
+    }
+
     res.json({
       success: true,
       message: 'Journey ended successfully',
@@ -171,7 +324,8 @@ exports.endJourney = async (req, res) => {
         id: journey._id.toString(),
         startedAt: journey.startedAt,
         endedAt: journey.endedAt
-      }
+      },
+      notificationsSent: parentIds.size
     });
   } catch (error) {
     console.error('End journey error:', error);

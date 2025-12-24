@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { fetchRoute, updateLocation } from '../../store/slices/driverSlice'
 import DriverLayout from '../../components/layouts/DriverLayout'
 import toast from 'react-hot-toast'
+import { BACKEND_URL } from '../../config/api'
 
 const Dashboard = () => {
   const dispatch = useDispatch()
@@ -230,7 +231,7 @@ const Dashboard = () => {
                   <div className="flex items-center space-x-3 mb-2">
                     {student.photo ? (
                       <img 
-                        src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                        src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`} 
                         alt={student.name}
                         className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
                         onError={(e) => {

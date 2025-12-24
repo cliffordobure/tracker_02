@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { fetchRoute, startJourney, endJourney, pickupStudent, dropStudent } from '../../store/slices/driverSlice'
 import DriverLayout from '../../components/layouts/DriverLayout'
 import toast from 'react-hot-toast'
+import { BACKEND_URL } from '../../config/api'
 
 const Journey = () => {
   const dispatch = useDispatch()
@@ -174,7 +175,7 @@ const Journey = () => {
                         <div className="flex items-center space-x-3 mb-3">
                           {student.photo ? (
                             <img 
-                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                              src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`} 
                               alt={student.name}
                               className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
                               onError={(e) => {
@@ -224,7 +225,7 @@ const Journey = () => {
                         <div className="flex items-center space-x-3 mb-3">
                           {student.photo ? (
                             <img 
-                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                              src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`} 
                               alt={student.name}
                               className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
                               onError={(e) => {
@@ -276,7 +277,7 @@ const Journey = () => {
                         <div className="flex items-center space-x-3 mb-3">
                           {student.photo ? (
                             <img 
-                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                              src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`} 
                               alt={student.name}
                               className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
                               onError={(e) => {

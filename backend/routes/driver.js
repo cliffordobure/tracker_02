@@ -88,26 +88,20 @@ router.get('/route', async (req, res) => {
 
     const route = await Route.findById(driver.currentRoute._id)
       .populate({
-        path: 'students',
-        select: 'name photo grade address latitude longitude pickup dropped status parents',
-        match: { 
-          isdelete: false,
-          status: { $ne: 'Leave' } // Exclude students on leave
-        },
-        populate: {
-          path: 'parents',
-          select: 'name email phone deviceToken'
-        }
-      })
-      .populate({
         path: 'stops',
         select: 'name address latitude longitude order'
       });
 
-    // Filter out students on leave (additional filter in case match didn't work)
-    const activeStudents = (route.students || []).filter(student => 
-      student && student.status !== 'Leave' && !student.isdelete
-    );
+    // Query students directly by route ID instead of relying on Route's students array
+    // This ensures we get all students assigned to this route
+    const activeStudents = await Student.find({
+      route: driver.currentRoute._id,
+      isdelete: false,
+      status: { $ne: 'Leave' }
+    })
+      .select('name photo grade address latitude longitude pickup dropped status parents')
+      .populate('parents', 'name email phone deviceToken')
+      .sort({ name: 1 });
 
     res.json({
       message: 'success',
