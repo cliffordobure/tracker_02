@@ -460,49 +460,54 @@ router.get('/students/:studentId/driver-location', async (req, res) => {
       });
     }
 
+    // Check if student has been dropped - if so, hide driver location
+    if (student.dropped && student.dropped.trim() !== '') {
+      return res.status(403).json({
+        success: false,
+        message: 'Driver location is no longer available. Your child has been dropped off.',
+        error: 'Student has been dropped'
+      });
+    }
+
     // Check if student has a route assigned
     if (!student.route) {
-      return res.json({
-        success: true,
-        message: 'Student has no route assigned',
-        driver: null
+      return res.status(404).json({
+        success: false,
+        message: 'Student does not have an assigned route',
+        error: 'No route assigned'
       });
     }
 
-    // Check if route has a driver assigned
-    if (!student.route.driver) {
-      return res.json({
-        success: true,
-        message: 'Route has no driver assigned',
-        driver: null
+    // Find driver for this route
+    const driver = await Driver.findOne({
+      currentRoute: student.route._id,
+      sid: student.sid,
+      status: 'Active'
+    }).select('name _id vehicleNumber phone photo latitude longitude speed lastLocationUpdate');
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: 'Driver location not found',
+        error: 'No active driver for this route'
       });
     }
-
-    const driver = student.route.driver;
 
     // Check if driver has location data
-    if (driver.latitude === null || driver.latitude === undefined || 
-        driver.longitude === null || driver.longitude === undefined) {
-      return res.json({
-        success: true,
+    if (!driver.latitude || !driver.longitude) {
+      return res.status(404).json({
+        success: false,
         message: 'Driver location not available yet',
-        driver: {
-          id: driver._id,
-          name: driver.name,
-          phone: driver.phone,
-          photo: driver.photo,
-          vehicleNumber: driver.vehicleNumber,
-          location: null
-        }
+        error: 'Driver has not started tracking location'
       });
     }
 
     // Return driver location
     res.json({
       success: true,
-      message: 'success',
+      message: 'Driver location retrieved successfully',
       driver: {
-        id: driver._id,
+        id: driver._id.toString(),
         name: driver.name,
         phone: driver.phone,
         photo: driver.photo,
@@ -510,8 +515,14 @@ router.get('/students/:studentId/driver-location', async (req, res) => {
         location: {
           latitude: driver.latitude,
           longitude: driver.longitude,
-          timestamp: driver.updatedAt || new Date()
+          timestamp: driver.lastLocationUpdate || new Date(),
+          speed: driver.speed || 0
         }
+      },
+      student: {
+        id: student._id.toString(),
+        name: student.name,
+        status: student.status
       }
     });
   } catch (error) {
@@ -1156,6 +1167,7 @@ router.put('/notices/:noticeId/read', async (req, res) => {
 
 const { sendToManager } = require('../controllers/parentMessageController');
 const Manager = require('../models/Manager');
+const parentController = require('../controllers/parentController');
 
 // Specific routes first (must come before parameterized routes)
 // Get manager information for parent's school
@@ -1995,7 +2007,18 @@ router.post('/driver/rate', async (req, res) => {
   }
 });
 
-// Request leave for student
+// ==================== STUDENT LEAVE, ACTIVATION & HISTORY ENDPOINTS ====================
+
+// Get student travel history
+router.get('/students/:studentId/history', parentController.getStudentHistory);
+
+// Request student leave (new implementation with LeaveRequest model)
+router.post('/students/:studentId/leave-request', parentController.requestStudentLeave);
+
+// Activate student (new implementation)
+router.post('/students/:studentId/activate', parentController.activateStudent);
+
+// Request leave for student (legacy endpoint - kept for backward compatibility)
 router.post('/students/:studentId/request-leave', async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -2063,7 +2086,7 @@ router.post('/students/:studentId/request-leave', async (req, res) => {
   }
 });
 
-// Activate student (mark as Active when returning)
+// Activate student (legacy endpoint - kept for backward compatibility)
 router.put('/students/:studentId/activate', async (req, res) => {
   try {
     const { studentId } = req.params;

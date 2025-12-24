@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { logout } from '../../store/slices/authSlice'
 import backgroundImage from '../../assets/background_image.png'
+import logo from '../../assets/logo.png'
 
 const DriverLayout = ({ children }) => {
   const navigate = useNavigate()
@@ -68,9 +69,11 @@ const DriverLayout = ({ children }) => {
                   )}
                 </svg>
               </button>
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-green-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm sm:text-lg">
-                🚗
-              </div>
+              <img 
+                src={logo} 
+                alt="TrackToto Logo" 
+                className="h-8 sm:h-10 w-auto object-contain"
+              />
               <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Driver Portal</h1>
             </div>
             <div className="flex items-center space-x-2 sm:space-x-4">

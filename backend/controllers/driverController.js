@@ -2,9 +2,11 @@ const Driver = require('../models/Driver');
 const Journey = require('../models/Journey');
 const Student = require('../models/Student');
 const Route = require('../models/Route');
+const Parent = require('../models/Parent');
 const Notification = require('../models/Notification');
 const { getSocketIO } = require('../services/socketService');
 const { sendPushNotification } = require('../services/firebaseService');
+const { emitNotification } = require('../utils/socketHelper');
 
 // Helper function to calculate speed using Haversine formula
 function calculateSpeed(lat1, lon1, lat2, lon2, timeDiffSeconds) {
@@ -25,6 +27,62 @@ function calculateSpeed(lat1, lon1, lat2, lon2, timeDiffSeconds) {
   // Cap at reasonable maximum (e.g., 120 km/h)
   return Math.min(speed, 120);
 }
+
+// Helper function to find closest stop/point name for a student
+const findPointName = async (student, route) => {
+  if (!route || !route.stops || route.stops.length === 0) {
+    return student.address || 'Unknown Location';
+  }
+  
+  if (!student.latitude || !student.longitude) {
+    return student.address || 'Unknown Location';
+  }
+
+  // Populate stops if they are ObjectIds
+  let stops = route.stops;
+  if (stops.length > 0) {
+    // Check if first stop is already populated (has name/latitude properties)
+    // If it's an ObjectId, it won't have these properties
+    const firstStop = stops[0];
+    if (firstStop && (firstStop.name || firstStop.latitude)) {
+      // Already populated - use as is
+    } else {
+      // Need to populate - stops are ObjectIds
+      const Stop = require('../models/Stop');
+      stops = await Stop.find({ _id: { $in: route.stops }, isdeleted: false });
+    }
+  }
+
+  // Find the closest stop to student's location
+  let closestStop = null;
+  let minDistance = Infinity;
+  for (const stop of stops) {
+    if (stop.latitude && stop.longitude) {
+      // Calculate distance using Haversine formula
+      const R = 6371; // Earth's radius in km
+      const dLat = (stop.latitude - student.latitude) * Math.PI / 180;
+      const dLon = (stop.longitude - student.longitude) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(student.latitude * Math.PI / 180) * 
+        Math.cos(stop.latitude * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestStop = stop;
+      }
+    }
+  }
+
+  // If found a stop within 500 meters, use its name, otherwise use address
+  if (closestStop && minDistance < 0.5) {
+    return closestStop.name || student.address || 'Unknown Location';
+  }
+  return student.address || 'Unknown Location';
+};
 
 // Update driver location with speed calculation
 exports.updateLocation = async (req, res) => {
@@ -232,6 +290,12 @@ exports.markStudentPickedUp = async (req, res) => {
       pickupTime = new Date();
     }
 
+    // Get route to find pickup point name
+    let pickupPointName = null;
+    if (route) {
+      pickupPointName = await findPointName(student, route);
+    }
+
     // Update student pickup time
     student.pickup = pickupTime.toISOString();
     student.status = 'Active';
@@ -254,16 +318,30 @@ exports.markStudentPickedUp = async (req, res) => {
 
     // Create notifications for parents
     const io = getSocketIO();
-    const pickupTimeString = pickupTime.toLocaleTimeString('en-GB', {
+    const pickupTimeString = pickupTime.toLocaleTimeString('en-US', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: false
     });
-    const message = `✅ ${student.name} has been picked up by the bus at ${pickupTimeString}`;
+    const message = `✅ ${student.name} has been picked up at ${pickupPointName}`;
 
     if (student.parents && student.parents.length > 0) {
       const parentDeviceTokens = [];
       
       for (const parent of student.parents) {
+        const notificationData = {
+          type: 'student_picked_up',
+          studentId: student._id.toString(),
+          studentName: student.name,
+          routeId: student.route ? student.route.toString() : (route ? route._id.toString() : null),
+          routeName: route ? route.name : null,
+          pickupTime: pickupTime.toISOString(),
+          pickupTimeLocal: pickupTimeString,
+          pickupPointName: pickupPointName,
+          message: message,
+          timestamp: pickupTime.toISOString()
+        };
+
         await Notification.create({
           pid: parent._id,
           sid: route.sid,
@@ -273,15 +351,8 @@ exports.markStudentPickedUp = async (req, res) => {
         });
 
         // Send real-time notification via Socket.io
-        io.to(`parent:${parent._id}`).emit('notification', {
-          type: 'student_picked_up',
-          studentId: student._id,
-          studentName: student.name,
-          message,
-          pickupTime: pickupTime.toISOString(),
-          pickupTimeLocal: pickupTimeString,
-          timestamp: new Date().toISOString()
-        });
+        const room = `parent:${parent._id}`;
+        emitNotification(io, room, notificationData);
 
         // Collect device tokens for FCM
         if (parent.deviceToken && parent.deviceToken.trim() !== '') {
@@ -302,7 +373,8 @@ exports.markStudentPickedUp = async (req, res) => {
               routeId: route._id.toString(),
               routeName: route.name,
               pickupTime: pickupTime.toISOString(),
-              pickupTimeLocal: pickupTimeString
+              pickupTimeLocal: pickupTimeString,
+              pickupPointName: pickupPointName
             },
             '✅ Student Boarded'
           );
@@ -334,7 +406,8 @@ exports.markStudentPickedUp = async (req, res) => {
       student: {
         id: student._id.toString(),
         name: student.name,
-        pickup: student.pickup
+        pickup: student.pickup,
+        pickupPointName: pickupPointName
       }
     });
   } catch (error) {
@@ -421,6 +494,12 @@ exports.markStudentDropped = async (req, res) => {
       dropTime = new Date();
     }
 
+    // Get route to find drop point name
+    let dropPointName = null;
+    if (route) {
+      dropPointName = await findPointName(student, route);
+    }
+
     // Update student drop time
     student.dropped = dropTime.toISOString();
     student.status = 'Active';
@@ -443,16 +522,30 @@ exports.markStudentDropped = async (req, res) => {
 
     // Create notifications for parents
     const io = getSocketIO();
-    const dropTimeString = dropTime.toLocaleTimeString('en-GB', {
+    const dropTimeString = dropTime.toLocaleTimeString('en-US', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: false
     });
-    const message = `🏠 ${student.name} has been dropped off by the bus at ${dropTimeString}`;
+    const message = `🏠 ${student.name} has been dropped at ${dropPointName}`;
 
     if (student.parents && student.parents.length > 0) {
       const parentDeviceTokens = [];
       
       for (const parent of student.parents) {
+        const notificationData = {
+          type: 'student_dropped',
+          studentId: student._id.toString(),
+          studentName: student.name,
+          routeId: student.route ? student.route.toString() : (route ? route._id.toString() : null),
+          routeName: route ? route.name : null,
+          dropTime: dropTime.toISOString(),
+          dropTimeLocal: dropTimeString,
+          dropPointName: dropPointName,
+          message: message,
+          timestamp: dropTime.toISOString()
+        };
+
         await Notification.create({
           pid: parent._id,
           sid: route.sid,
@@ -462,15 +555,8 @@ exports.markStudentDropped = async (req, res) => {
         });
 
         // Send real-time notification via Socket.io
-        io.to(`parent:${parent._id}`).emit('notification', {
-          type: 'student_dropped',
-          studentId: student._id,
-          studentName: student.name,
-          message,
-          dropTime: dropTime.toISOString(),
-          dropTimeLocal: dropTimeString,
-          timestamp: new Date().toISOString()
-        });
+        const room = `parent:${parent._id}`;
+        emitNotification(io, room, notificationData);
 
         // Collect device tokens for FCM
         if (parent.deviceToken && parent.deviceToken.trim() !== '') {
@@ -491,7 +577,8 @@ exports.markStudentDropped = async (req, res) => {
               routeId: route._id.toString(),
               routeName: route.name,
               dropTime: dropTime.toISOString(),
-              dropTimeLocal: dropTimeString
+              dropTimeLocal: dropTimeString,
+              dropPointName: dropPointName
             },
             '🏠 Student Dropped'
           );
@@ -523,7 +610,8 @@ exports.markStudentDropped = async (req, res) => {
       student: {
         id: student._id.toString(),
         name: student.name,
-        dropped: student.dropped
+        dropped: student.dropped,
+        dropPointName: dropPointName
       }
     });
   } catch (error) {

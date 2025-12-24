@@ -4,6 +4,7 @@ import { fetchRoute, fetchJourneyStatus, startJourney, endJourney, pickupStudent
 import DriverLayout from '../../components/layouts/DriverLayout'
 import toast from 'react-hot-toast'
 import { BACKEND_URL } from '../../config/api'
+import logo from '../../assets/logo.png'
 
 const Journey = () => {
   const dispatch = useDispatch()
@@ -153,6 +154,15 @@ const Journey = () => {
   return (
     <DriverLayout>
       <div className="p-3 sm:p-4 md:p-6">
+        {/* Logo */}
+        <div className="mb-4 sm:mb-6 flex justify-center">
+          <img 
+            src={logo} 
+            alt="TrackToto Logo" 
+            className="h-12 sm:h-16 md:h-20 w-auto object-contain"
+          />
+        </div>
+        
         {/* Header */}
         <div className="mb-4 sm:mb-6 md:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Journey Management</h1>

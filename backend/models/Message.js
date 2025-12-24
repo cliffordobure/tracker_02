@@ -24,6 +24,10 @@ const messageSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true
   },
+  toName: {
+    type: String,
+    trim: true
+  },
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Student'
