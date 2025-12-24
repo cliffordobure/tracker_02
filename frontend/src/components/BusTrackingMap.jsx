@@ -106,6 +106,13 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
     return () => clearTimeout(timer)
   }, [isLoaded])
 
+  // Create a Set of valid driver IDs from the drivers prop for filtering
+  const validDriverIds = useMemo(() => {
+    const ids = new Set(drivers.map(driver => String(driver._id)))
+    console.log('✅ Valid driver IDs for filtering:', Array.from(ids))
+    return ids
+  }, [drivers])
+
   // Initialize Socket.io connection
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -160,6 +167,12 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
       }
       
       const driverId = String(data.driverId) // Normalize to string
+      
+      // CRITICAL: Only process location updates for drivers in our valid list
+      if (!validDriverIds.has(driverId)) {
+        console.log(`🚫 Ignoring location update for driver ${driverId} - not in valid drivers list`)
+        return
+      }
       
       if (data.latitude && data.longitude) {
         setDriverLocations(prev => {
@@ -222,6 +235,12 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
       
       const driverId = String(data.driverId) // Normalize to string
       
+      // CRITICAL: Only process location updates for drivers in our valid list
+      if (!validDriverIds.has(driverId)) {
+        console.log(`🚫 Ignoring driver-location-update for driver ${driverId} - not in valid drivers list`)
+        return
+      }
+      
       if (data.latitude && data.longitude) {
         setDriverLocations(prev => {
           const prevLocation = prev[driverId]
@@ -273,6 +292,12 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
       }
       
       const driverId = String(data.driverId) // Normalize to string
+      
+      // CRITICAL: Only process journey events for drivers in our valid list
+      if (!validDriverIds.has(driverId)) {
+        console.log(`🚫 Ignoring journey-started for driver ${driverId} - not in valid drivers list`)
+        return
+      }
       
       // If driver has location, update it
       if (data.latitude && data.longitude) {
@@ -326,7 +351,7 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
       console.log('Closing Socket.io connection')
       newSocket.close()
     }
-  }, [onRefreshDrivers])
+  }, [onRefreshDrivers, validDriverIds])
 
 
   // Initialize driver locations from props - MERGE instead of replace
@@ -334,14 +359,23 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
   useEffect(() => {
     console.log('🔄 Updating driver locations from props:', drivers.length, 'drivers')
     setDriverLocations(prev => {
-      const newLocations = { ...prev } // ALWAYS keep existing locations from Socket.io
+      const newLocations = {} // Start fresh with only valid drivers
       const prevCount = Object.keys(prev).length
       
-      // CRITICAL: If drivers prop is empty but we have existing locations, don't clear them
-      // This prevents locations from disappearing on refresh
-      if (drivers.length === 0 && prevCount > 0) {
-        console.log(`⚠️ Drivers prop is empty but we have ${prevCount} locations from Socket.io - KEEPING them`)
-        return prev // Don't clear existing locations
+      // CRITICAL: Remove any locations for drivers that are no longer in the valid list
+      // This ensures we only show drivers that belong to the current school
+      Object.keys(prev).forEach(driverId => {
+        if (validDriverIds.has(driverId)) {
+          newLocations[driverId] = prev[driverId] // Keep existing location if driver is still valid
+        } else {
+          console.log(`🗑️ Removing location for driver ${driverId} - no longer in valid drivers list`)
+        }
+      })
+      
+      // CRITICAL: If drivers prop is empty, clear all locations
+      if (drivers.length === 0) {
+        console.log(`⚠️ Drivers prop is empty - clearing all locations`)
+        return {}
       }
       
       drivers.forEach(driver => {
@@ -391,10 +425,10 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
       })
       
       const newCount = Object.keys(newLocations).length
-      console.log(`📍 Total driver locations: ${prevCount} → ${newCount} (added ${newCount - prevCount})`)
+      console.log(`📍 Total driver locations: ${prevCount} → ${newCount} (removed ${prevCount - newCount} invalid drivers)`)
       return newLocations
     })
-  }, [drivers])
+  }, [drivers, validDriverIds])
 
   const onLoad = useCallback((map) => {
     mapRef.current = map
@@ -407,12 +441,16 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
   }, [])
 
   // Calculate valid locations using useMemo so it's available throughout the component
+  // Only include locations for drivers that are in the validDriverIds set
   const validLocations = useMemo(() => {
-    return Object.values(driverLocations).filter(loc => 
-      loc.latitude != null && loc.longitude != null && 
-      !isNaN(loc.latitude) && !isNaN(loc.longitude)
-    )
-  }, [driverLocations])
+    return Object.entries(driverLocations)
+      .filter(([driverId]) => validDriverIds.has(driverId)) // Only include valid drivers
+      .map(([, location]) => location)
+      .filter(loc => 
+        loc.latitude != null && loc.longitude != null && 
+        !isNaN(loc.latitude) && !isNaN(loc.longitude)
+      )
+  }, [driverLocations, validDriverIds])
 
   // Calculate map bounds to fit all drivers
   const fitBounds = useCallback(() => {
@@ -573,7 +611,9 @@ const BusTrackingMap = ({ drivers = [], onRefreshDrivers }) => {
           ]
         }}
       >
-        {Object.entries(driverLocations).map(([driverId, location]) => {
+        {Object.entries(driverLocations)
+          .filter(([driverId]) => validDriverIds.has(driverId)) // Only render markers for valid drivers
+          .map(([driverId, location]) => {
           if (!location || !location.latitude || !location.longitude || 
               isNaN(location.latitude) || isNaN(location.longitude)) {
             console.log(`⚠️ Skipping driver ${location?.driverName || driverId} - invalid coordinates`)
