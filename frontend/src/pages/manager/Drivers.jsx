@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import ManagerLayout from '../../components/layouts/ManagerLayout'
 import { fetchDrivers, createDriver, updateDriver, deleteDriver } from '../../store/slices/managerDriversSlice'
+import { BACKEND_URL } from '../../config/api'
 
 const Drivers = () => {
   const dispatch = useDispatch()
@@ -216,7 +217,11 @@ const Drivers = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           {driver.photo ? (
                             <img 
-                              src={driver.photo.startsWith('http') ? driver.photo : `http://localhost:5000${driver.photo}`} 
+                              src={
+                                driver.photo.startsWith('http') || driver.photo.startsWith('data:image') 
+                                  ? driver.photo 
+                                  : `${BACKEND_URL}${driver.photo.startsWith('/') ? '' : '/'}${driver.photo}`
+                              } 
                               alt={driver.name}
                               className="w-12 h-12 rounded-full object-cover"
                               onError={(e) => {

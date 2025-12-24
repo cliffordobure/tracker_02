@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import AdminLayout from '../../components/layouts/AdminLayout'
 import api from '../../services/api'
+import { BACKEND_URL } from '../../config/api'
 
 const TrackingReport = () => {
   const [drivers, setDrivers] = useState([])
@@ -165,7 +166,11 @@ const TrackingReport = () => {
                           <div className="flex items-center space-x-3">
                             {driver.photo && driver.photo.trim() ? (
                               <img 
-                                src={driver.photo.startsWith('http') ? driver.photo : `http://localhost:5000${driver.photo}`} 
+                                src={
+                                  driver.photo.startsWith('http') || driver.photo.startsWith('data:image') 
+                                    ? driver.photo 
+                                    : `${BACKEND_URL}${driver.photo.startsWith('/') ? '' : '/'}${driver.photo}`
+                                } 
                                 alt={driver.name}
                                 className="w-10 h-10 rounded-full object-cover"
                                 onError={(e) => {
