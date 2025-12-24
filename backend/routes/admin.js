@@ -369,7 +369,20 @@ router.get('/parents', async (req, res) => {
   try {
     const parents = await Parent.find({})
       .select('-password')
-      .populate('students', 'name grade status')
+      .populate({
+        path: 'students',
+        select: 'name grade status photo address',
+        populate: [
+          {
+            path: 'route',
+            select: 'name'
+          },
+          {
+            path: 'sid',
+            select: 'name'
+          }
+        ]
+      })
       .populate('sid', 'name')
       .sort({ createdAt: -1 });
     res.json(parents);

@@ -90,6 +90,10 @@ router.get('/route', async (req, res) => {
       .populate({
         path: 'students',
         select: 'name photo grade address latitude longitude pickup dropped status parents',
+        match: { 
+          isdelete: false,
+          status: { $ne: 'Leave' } // Exclude students on leave
+        },
         populate: {
           path: 'parents',
           select: 'name email phone deviceToken'
@@ -100,6 +104,11 @@ router.get('/route', async (req, res) => {
         select: 'name address latitude longitude order'
       });
 
+    // Filter out students on leave (additional filter in case match didn't work)
+    const activeStudents = (route.students || []).filter(student => 
+      student && student.status !== 'Leave' && !student.isdelete
+    );
+
     res.json({
       message: 'success',
       route: {
@@ -107,7 +116,7 @@ router.get('/route', async (req, res) => {
         name: route.name,
         stops: route.stops
       },
-      students: route.students.map(student => ({
+      students: activeStudents.map(student => ({
         id: student._id,
         name: student.name,
         photo: student.photo,

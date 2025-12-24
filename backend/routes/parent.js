@@ -1995,4 +1995,137 @@ router.post('/driver/rate', async (req, res) => {
   }
 });
 
+// Request leave for student
+router.post('/students/:studentId/request-leave', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { reason } = req.body;
+
+    const parent = await Parent.findById(req.user._id);
+    if (!parent.students.includes(studentId)) {
+      return res.status(403).json({ message: 'Access denied. Student not associated with this parent.' });
+    }
+
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Update student status to Leave
+    student.status = 'Leave';
+    student.leftSchool = new Date().toISOString();
+    student.leftSchoolBy = null; // Parent requested, not teacher
+    student.updatedAt = Date.now();
+    
+    await student.save();
+
+    // Notify manager and teachers via socket
+    const io = getSocketIO();
+    const notificationMessage = reason 
+      ? `📋 ${student.name} has been requested for leave by parent. Reason: ${reason}`
+      : `📋 ${student.name} has been requested for leave by parent.`;
+
+    // Create notification for manager
+    const manager = await require('../models/Manager').findOne({ sid: student.sid });
+    if (manager) {
+      await Notification.create({
+        pid: manager._id,
+        message: notificationMessage,
+        type: 'student_leave_request',
+        studentId: student._id
+      });
+    }
+
+    // Notify teachers
+    const teachers = await Staff.find({ 
+      sid: student.sid,
+      role: 'teacher',
+      assignedClass: student.grade
+    });
+    
+    teachers.forEach(async (teacher) => {
+      await Notification.create({
+        pid: teacher._id,
+        message: notificationMessage,
+        type: 'student_leave_request',
+        studentId: student._id
+      });
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Leave request submitted successfully',
+      student 
+    });
+  } catch (error) {
+    console.error('Error requesting leave:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Activate student (mark as Active when returning)
+router.put('/students/:studentId/activate', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    const parent = await Parent.findById(req.user._id);
+    if (!parent.students.includes(studentId)) {
+      return res.status(403).json({ message: 'Access denied. Student not associated with this parent.' });
+    }
+
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Update status to Active
+    student.status = 'Active';
+    student.leftSchool = '';
+    student.leftSchoolBy = null;
+    student.updatedAt = Date.now();
+    
+    await student.save();
+
+    // Notify manager and teachers
+    const io = getSocketIO();
+    const notificationMessage = `✅ ${student.name} has been marked as Active by parent and is ready to return to school.`;
+
+    // Create notification for manager
+    const manager = await require('../models/Manager').findOne({ sid: student.sid });
+    if (manager) {
+      await Notification.create({
+        pid: manager._id,
+        message: notificationMessage,
+        type: 'student_active',
+        studentId: student._id
+      });
+    }
+
+    // Notify teachers
+    const teachers = await Staff.find({ 
+      sid: student.sid,
+      role: 'teacher',
+      assignedClass: student.grade
+    });
+    
+    teachers.forEach(async (teacher) => {
+      await Notification.create({
+        pid: teacher._id,
+        message: notificationMessage,
+        type: 'student_active',
+        studentId: student._id
+      });
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Student activated successfully',
+      student 
+    });
+  } catch (error) {
+    console.error('Error activating student:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;

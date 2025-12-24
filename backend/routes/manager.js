@@ -107,7 +107,20 @@ router.get('/parents', async (req, res) => {
       ]
     })
       .select('-password')
-      .populate('students', 'name')
+      .populate({
+        path: 'students',
+        select: 'name grade status photo address',
+        populate: [
+          {
+            path: 'route',
+            select: 'name'
+          },
+          {
+            path: 'sid',
+            select: 'name'
+          }
+        ]
+      })
       .sort({ createdAt: -1 });
 
     res.json(parents);
@@ -1501,7 +1514,10 @@ router.get('/kids', async (req, res) => {
       .populate({
         path: 'students',
         select: 'name photo grade address status',
-        match: { isdelete: false }
+        match: { 
+          isdelete: false,
+          status: { $ne: 'Leave' } // Exclude students on leave
+        }
       })
       .populate('driver', 'name email phone vehicleNumber')
       .sort({ name: 1 });
@@ -1513,14 +1529,16 @@ router.get('/kids', async (req, res) => {
         .map(route => ({
           id: route._id,
           name: route.name,
-          students: route.students.filter(student => student !== null).map(student => ({
-            id: student._id,
-            name: student.name,
-            photo: student.photo,
-            grade: student.grade,
-            address: student.address,
-            status: student.status
-          }))
+          students: route.students
+            .filter(student => student !== null && student.status !== 'Leave')
+            .map(student => ({
+              id: student._id,
+              name: student.name,
+              photo: student.photo,
+              grade: student.grade,
+              address: student.address,
+              status: student.status
+            }))
         }));
 
       return {
@@ -1781,6 +1799,69 @@ router.post('/messages', async (req, res) => {
         createdAt: newMessage.createdAt
       }
     });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get students on leave
+router.get('/students/on-leave', async (req, res) => {
+  try {
+    const students = await Student.find({
+      sid: req.user.sid,
+      isdelete: false,
+      status: 'Leave'
+    })
+      .populate('route', 'name')
+      .populate('parents', 'name email')
+      .sort({ leftSchool: -1 });
+
+    res.json(students);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Activate student (change status from Leave to Active)
+router.put('/students/:id/activate', async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id);
+    
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Check if student belongs to manager's school
+    if (student.sid.toString() !== req.user.sid.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Update status to Active
+    student.status = 'Active';
+    student.leftSchool = '';
+    student.leftSchoolBy = null;
+    student.updatedAt = Date.now();
+    
+    await student.save();
+
+    // Notify parents
+    const io = getSocketIO();
+    if (student.parents && student.parents.length > 0) {
+      const parentIds = student.parents.map(p => p.toString());
+      const parents = await Parent.find({ _id: { $in: parentIds } }).select('deviceToken');
+      
+      parents.forEach(parent => {
+        if (parent.deviceToken) {
+          io.to(parent.deviceToken).emit('notification', {
+            type: 'student_active',
+            message: `✅ ${student.name}'s status has been changed to "Active"`,
+            studentId: student._id
+          });
+        }
+      });
+    }
+
+    res.json({ message: 'Student activated successfully', student });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
