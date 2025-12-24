@@ -11,6 +11,7 @@ const Staff = () => {
   const [filterSchool, setFilterSchool] = useState('')
   const [filterRole, setFilterRole] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     dispatch(fetchStaff())
@@ -18,9 +19,21 @@ const Staff = () => {
   }, [dispatch])
 
   const filteredStaff = staff?.filter((member) => {
+    // Filter by school
     if (filterSchool && member.sid?._id !== filterSchool) return false
+    // Filter by role
     if (filterRole && member.role !== filterRole) return false
+    // Filter by status
     if (filterStatus && member.status !== filterStatus) return false
+    // Filter by search term
+    const searchLower = searchTerm.toLowerCase()
+    if (searchTerm && !(
+      member.name?.toLowerCase().includes(searchLower) ||
+      member.email?.toLowerCase().includes(searchLower) ||
+      member.phone?.toLowerCase().includes(searchLower) ||
+      member.sid?.name?.toLowerCase().includes(searchLower) ||
+      member.assignedClass?.toLowerCase().includes(searchLower)
+    )) return false
     return true
   }) || []
 
@@ -42,6 +55,26 @@ const Staff = () => {
 
         {/* Filters */}
         <div className="card mb-6">
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search staff by name, email, phone, school, or class..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <svg
+                className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Filter by School</label>
@@ -108,7 +141,9 @@ const Staff = () => {
                       <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                         {staff?.length === 0 
                           ? 'No staff members found.' 
-                          : 'No staff members match the selected filters.'}
+                          : (searchTerm || filterSchool || filterRole || filterStatus
+                              ? 'No staff members match your search or filter criteria.'
+                              : 'No staff members found.')}
                       </td>
                     </tr>
                   ) : (
