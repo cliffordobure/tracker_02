@@ -5,6 +5,7 @@ import ManagerLayout from '../../components/layouts/ManagerLayout'
 import MapPicker from '../../components/MapPicker'
 import { fetchStudents, createStudent, updateStudent, deleteStudent } from '../../store/slices/managerStudentsSlice'
 import api from '../../services/api'
+import { BACKEND_URL } from '../../config/api'
 
 // Available grades/classes for selection
 const AVAILABLE_GRADES = [
@@ -49,6 +50,8 @@ const Students = () => {
     status: 'Active',
     photo: ''
   })
+  const [photoPreview, setPhotoPreview] = useState(null)
+  const [photoFile, setPhotoFile] = useState(null)
 
   useEffect(() => {
     dispatch(fetchStudents())
@@ -154,6 +157,18 @@ const Students = () => {
         parents: formData.parents || [],
         status: formData.status
       }
+      
+      // Only include photo if a new one was selected (base64) or if editing and keeping existing
+      if (photoPreview && photoPreview.startsWith('data:image')) {
+        // New photo selected - send base64
+        data.photo = photoPreview
+      } else if (editingStudent && formData.photo && !photoPreview) {
+        // Editing but no new photo selected - keep existing photo path
+        data.photo = formData.photo
+      } else if (!editingStudent && !photoPreview) {
+        // Creating new student without photo - use default
+        data.photo = '/uploads/default-student.png'
+      }
 
       if (editingStudent) {
         await dispatch(updateStudent({ id: editingStudent._id, studentData: data })).unwrap()
@@ -182,6 +197,16 @@ const Students = () => {
       s.latitude === student.latitude && s.longitude === student.longitude
     )
     
+    // Set photo preview - show existing photo if available
+    let existingPhotoUrl = null
+    if (student.photo && student.photo.trim()) {
+      if (student.photo.startsWith('data:image') || student.photo.startsWith('http')) {
+        existingPhotoUrl = student.photo
+      } else {
+        existingPhotoUrl = `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`
+      }
+    }
+    
     setFormData({
       name: student.name || '',
       grade: student.grade || '',
@@ -194,6 +219,8 @@ const Students = () => {
       status: student.status || 'Active',
       photo: student.photo || ''
     })
+    setPhotoPreview(existingPhotoUrl)
+    setPhotoFile(null)
     
     // Set location method based on whether we found a matching stop
     setLocationMethod(matchingStop ? 'stop' : 'map')
@@ -225,6 +252,8 @@ const Students = () => {
       status: 'Active',
       photo: ''
     })
+    setPhotoPreview(null)
+    setPhotoFile(null)
     setLocationMethod('stop')
     setCreateNewStop(false)
     setEditingStudent(null)
@@ -353,20 +382,22 @@ const Students = () => {
                         className="hover:bg-gradient-to-r hover:from-primary-50 hover:to-transparent transition-all duration-200 animate-slide-up"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {student.photo ? (
-                            <img 
-                              src={student.photo.startsWith('http') ? student.photo : `http://localhost:5000${student.photo}`} 
+                          {student.photo && student.photo.trim() && !student.photo.startsWith('data:image') ? (
+                            <img
+                              src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`}
                               alt={student.name}
-                              className="w-12 h-12 rounded-full object-cover"
+                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-200"
                               onError={(e) => {
-                                e.target.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Ccircle cx='24' cy='24' r='24' fill='%23ddd'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='20' fill='%23999'%3E${student.name?.charAt(0)?.toUpperCase() || 'S'}%3C/text%3E%3C/svg%3E`
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
                               }}
                             />
-                          ) : (
-                            <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
-                              {student.name?.charAt(0)?.toUpperCase() || 'S'}
-                            </div>
-                          )}
+                          ) : null}
+                          <div
+                            className={`w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ${student.photo && student.photo.trim() && !student.photo.startsWith('data:image') ? 'hidden' : ''}`}
+                          >
+                            {student.name?.charAt(0)?.toUpperCase() || 'S'}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-semibold text-gray-900">{student.name}</div>
@@ -485,8 +516,11 @@ const Students = () => {
                           // Check file size (max 5MB)
                           if (file.size > 5 * 1024 * 1024) {
                             toast.error('Image size must be less than 5MB. Please compress the image.')
+                            e.target.value = '' // Clear the input
                             return
                           }
+                          
+                          setPhotoFile(file)
                           
                           const reader = new FileReader()
                           reader.onloadend = () => {
@@ -516,20 +550,77 @@ const Students = () => {
                               
                               // Convert to base64 with compression (0.8 quality)
                               const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8)
+                              setPhotoPreview(compressedDataUrl)
                               setFormData({ ...formData, photo: compressedDataUrl })
+                            }
+                            img.onerror = () => {
+                              toast.error('Failed to load image. Please try another file.')
+                              setPhotoFile(null)
+                              setPhotoPreview(null)
+                              e.target.value = ''
                             }
                             img.src = reader.result
                           }
+                          reader.onerror = () => {
+                            toast.error('Failed to read file. Please try another file.')
+                            setPhotoFile(null)
+                            setPhotoPreview(null)
+                            e.target.value = ''
+                          }
                           reader.readAsDataURL(file)
+                        } else {
+                          setPhotoFile(null)
                         }
                       }}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200"
                     />
-                    {formData.photo && (
-                      <div className="mt-2">
-                        <img src={formData.photo} alt="Preview" className="w-20 h-20 object-cover rounded-lg" />
+                    <div className="mt-3 flex items-center space-x-4">
+                      {photoPreview ? (
+                        <div className="relative">
+                          <img 
+                            src={photoPreview} 
+                            alt="Preview" 
+                            className="w-24 h-24 object-cover rounded-lg border-2 border-primary-300 shadow-md"
+                            onError={(e) => {
+                              e.target.style.display = 'none'
+                              e.target.nextSibling.style.display = 'flex'
+                            }}
+                          />
+                          <div className="hidden w-24 h-24 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-md">
+                            {formData.name?.charAt(0)?.toUpperCase() || 'S'}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPhotoPreview(null)
+                              setPhotoFile(null)
+                              setFormData({ ...formData, photo: editingStudent?.photo || '' })
+                              // Reset file input
+                              const fileInput = document.querySelector('input[type="file"]')
+                              if (fileInput) fileInput.value = ''
+                            }}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
+                            title="Remove photo"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-24 h-24 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-gray-400">
+                          <svg className="w-8 h-8 text-gray-500 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-xs text-gray-500 font-medium">No photo</span>
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500">
+                        <p>• Max size: 5MB</p>
+                        <p>• Formats: JPG, PNG</p>
+                        <p>• Auto-resized to 800px</p>
                       </div>
-                    )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Grade</label>
