@@ -111,19 +111,19 @@ const AdminLayout = ({ children }) => {
         {/* Sidebar */}
         <aside
           className={`
-            fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
+            fixed inset-y-0 left-0 z-50 w-64 bg-green-600 shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           `}
         >
           {/* Mobile Sidebar Header */}
-          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="lg:hidden flex items-center justify-between p-4 border-b border-green-700">
             <div className="flex items-center space-x-3">
               <img src={logo} alt="Logo" className="h-8 w-8 object-contain" />
-              <span className="text-lg font-bold text-gray-800">Menu</span>
+              <span className="text-lg font-bold text-white">Menu</span>
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              className="p-2 rounded-md text-white hover:text-gray-200 hover:bg-green-700"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -132,12 +132,12 @@ const AdminLayout = ({ children }) => {
           </div>
 
           {/* Mobile User Info */}
-          <div className="lg:hidden p-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-yellow-50">
-            <p className="text-sm font-medium text-gray-700">{user?.name}</p>
-            <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+          <div className="lg:hidden p-4 border-b border-green-700 bg-green-700">
+            <p className="text-sm font-medium text-white">{user?.name}</p>
+            <p className="text-xs text-green-100 truncate">{user?.email}</p>
             <button
               onClick={handleLogout}
-              className="mt-2 w-full px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+              className="mt-2 w-full px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-400 transition-colors"
             >
               Logout
             </button>
@@ -157,8 +157,8 @@ const AdminLayout = ({ children }) => {
                       w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3
                       ${
                         isActive(item.path)
-                          ? 'bg-primary-600 text-white shadow-md'
-                          : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
+                          ? 'bg-green-800 text-white shadow-md'
+                          : 'text-white hover:bg-green-700 hover:text-white'
                       }
                     `}
                   >
