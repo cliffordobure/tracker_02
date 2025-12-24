@@ -105,6 +105,9 @@ const ActiveSuspendedDrivers = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Photo
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Name
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -130,7 +133,7 @@ const ActiveSuspendedDrivers = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredDrivers.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                      <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
                         {searchTerm || filterStatus !== 'all' 
                           ? 'No drivers match your search or filter criteria.' 
                           : 'No drivers found.'}
@@ -139,6 +142,24 @@ const ActiveSuspendedDrivers = () => {
                   ) : (
                     filteredDrivers.map((driver) => (
                       <tr key={driver._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {driver.photo ? (
+                            <img 
+                              src={driver.photo.startsWith('http') ? driver.photo : `http://localhost:5000${driver.photo}`} 
+                              alt={driver.name}
+                              className="w-12 h-12 rounded-full object-cover"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ${driver.photo ? 'hidden' : ''}`}
+                          >
+                            {driver.name?.charAt(0)?.toUpperCase() || 'D'}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{driver.name}</div>
                         </td>
