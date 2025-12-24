@@ -64,11 +64,73 @@ router.get('/dashboard', async (req, res) => {
       sid: req.user.sid
     });
 
+    // Get categorized students (grouped by grade)
+    const allStudents = await Student.find({
+      isdelete: false,
+      sid: req.user.sid
+    })
+      .select('name grade status route photo')
+      .populate('route', 'name')
+      .sort({ grade: 1, name: 1 });
+
+    const categorizedStudents = allStudents.reduce((acc, student) => {
+      const grade = student.grade || 'Unassigned';
+      if (!acc[grade]) {
+        acc[grade] = [];
+      }
+      acc[grade].push({
+        _id: student._id,
+        name: student.name,
+        grade: student.grade,
+        status: student.status,
+        route: student.route ? { name: student.route.name } : null,
+        photo: student.photo
+      });
+      return acc;
+    }, {});
+
+    // Get categorized teachers (grouped by assignedClass)
+    const allTeachers = await Staff.find({
+      isdelete: false,
+      sid: req.user.sid,
+      role: 'teacher'
+    })
+      .select('name email phone photo assignedClass assignedClasses status')
+      .sort({ assignedClass: 1, name: 1 });
+
+    const categorizedTeacher = allTeachers.reduce((acc, teacher) => {
+      // Handle both assignedClass (single) and assignedClasses (array)
+      const classes = teacher.assignedClasses && teacher.assignedClasses.length > 0
+        ? teacher.assignedClasses
+        : teacher.assignedClass
+          ? [teacher.assignedClass]
+          : ['Unassigned'];
+      
+      classes.forEach(className => {
+        if (!acc[className]) {
+          acc[className] = [];
+        }
+        acc[className].push({
+          _id: teacher._id,
+          name: teacher.name,
+          email: teacher.email,
+          phone: teacher.phone,
+          photo: teacher.photo,
+          assignedClass: teacher.assignedClass,
+          assignedClasses: teacher.assignedClasses,
+          status: teacher.status
+        });
+      });
+      return acc;
+    }, {});
+
     res.json({
       parents,
       students,
       routes,
-      drivers
+      drivers,
+      categorizedStudents,
+      categorizedTeacher
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
