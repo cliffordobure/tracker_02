@@ -24,16 +24,6 @@ const AdminLayout = ({ children }) => {
     { name: 'Managers', path: '/admin/managers', icon: '👥' },
     { name: 'Parents', path: '/admin/parents', icon: '👨‍👩‍👧' },
     { name: 'Students', path: '/admin/students', icon: '👨‍🎓' },
-    { name: 'Students by Class', path: '/admin/students-by-class', icon: '📚' },
-    { name: 'Teachers by Class', path: '/admin/teachers-by-class', icon: '👨‍🏫' },
-    { name: 'On Leave', path: '/admin/on-leave', icon: '🚪' },
-    { name: 'Inbox', path: '/admin/inbox', icon: '📥' },
-    { name: 'Outbox', path: '/admin/outbox', icon: '📤' },
-    { name: 'Active/Suspended Schools', path: '/admin/active-suspended-schools', icon: '🏫' },
-    { name: 'Active/Suspended Drivers', path: '/admin/active-suspended-drivers', icon: '🚗' },
-    { name: 'Staff', path: '/admin/staff', icon: '👨‍💼' },
-    { name: 'Reports', path: '/admin/reports', icon: '📄' },
-    { name: 'Tracking Report', path: '/admin/tracking-report', icon: '📍' },
   ]
 
   const isActive = (path) => {
