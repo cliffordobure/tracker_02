@@ -13,15 +13,19 @@ import Kids from './Kids'
 import Inbox from './Inbox'
 import Outbox from './Outbox'
 import OnLeave from './OnLeave'
+import CategorizedStudents from './CategorizedStudents'
+import CategorizedTeachers from './CategorizedTeachers'
 
 const ManagerRouter = () => {
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
       <Route path="/students" element={<Students />} />
+      <Route path="/categorized-students" element={<CategorizedStudents />} />
       <Route path="/parents" element={<Parents />} />
       <Route path="/drivers" element={<Drivers />} />
       <Route path="/teachers" element={<Teachers />} />
+      <Route path="/categorized-teachers" element={<CategorizedTeachers />} />
       <Route path="/routes" element={<RoutesPage />} />
       <Route path="/stops" element={<Stops />} />
       <Route path="/driver-ratings" element={<DriverRatings />} />
