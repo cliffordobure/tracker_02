@@ -40,6 +40,11 @@ const Drivers = () => {
         return
       }
 
+      if (!data.licenseNumber || data.licenseNumber.trim() === '') {
+        toast.error('License number is required')
+        return
+      }
+
       if (editingDriver) {
         await dispatch(updateDriver({ id: editingDriver._id, driverData: data })).unwrap()
         toast.success('Driver updated successfully!')
@@ -194,7 +199,7 @@ const Drivers = () => {
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Name</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Email</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Phone</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ID Number</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">License Number</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Vehicle</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Speed</th>
                       <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
@@ -412,13 +417,14 @@ const Drivers = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">ID Number</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">License Number *</label>
                     <input
                       type="text"
+                      required
                       value={formData.licenseNumber}
                       onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 font-mono"
-                      placeholder="Enter ID number"
+                      placeholder="Enter license number"
                     />
                   </div>
                   <div>

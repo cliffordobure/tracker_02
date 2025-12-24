@@ -308,6 +308,10 @@ router.post('/drivers', async (req, res) => {
       return res.status(400).json({ message: 'Vehicle number is required' });
     }
 
+    if (!licenseNumber || licenseNumber.trim() === '') {
+      return res.status(400).json({ message: 'License number is required' });
+    }
+
     const existingDriver = await Driver.findOne({ email });
     if (existingDriver) {
       return res.status(400).json({ message: 'Email already exists' });
@@ -358,7 +362,12 @@ router.put('/drivers/:id', async (req, res) => {
     }
     if (phone !== undefined) driver.phone = phone;
     if (photo) driver.photo = photo;
-    if (licenseNumber) driver.licenseNumber = licenseNumber;
+    if (licenseNumber !== undefined) {
+      if (!licenseNumber || licenseNumber.trim() === '') {
+        return res.status(400).json({ message: 'License number is required' });
+      }
+      driver.licenseNumber = licenseNumber;
+    }
     if (vehicleNumber !== undefined) {
       if (!vehicleNumber || vehicleNumber.trim() === '') {
         return res.status(400).json({ message: 'Vehicle number is required' });
