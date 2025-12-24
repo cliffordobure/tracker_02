@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import AdminLayout from '../../components/layouts/AdminLayout'
 import api from '../../services/api'
 import { fetchSchools } from '../../store/slices/schoolsSlice'
+import { BACKEND_URL } from '../../config/api'
 
 const Parents = () => {
   const [parents, setParents] = useState([])
@@ -11,6 +12,9 @@ const Parents = () => {
   const { schools } = useSelector((state) => state.schools)
   const dispatch = useDispatch()
   const [showModal, setShowModal] = useState(false)
+  const [showStudentsModal, setShowStudentsModal] = useState(false)
+  const [selectedParentStudents, setSelectedParentStudents] = useState([])
+  const [selectedParentName, setSelectedParentName] = useState('')
   const [editingParent, setEditingParent] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState({
@@ -103,6 +107,31 @@ const Parents = () => {
     setEditingParent(null)
   }
 
+  const handleViewStudents = (parent) => {
+    setSelectedParentStudents(parent.students || [])
+    setSelectedParentName(parent.name)
+    setShowStudentsModal(true)
+  }
+
+  const getStatusBadge = (status) => {
+    const statusMap = {
+      'active': { label: 'Active', color: 'bg-green-100 text-green-800' },
+      'on_bus': { label: 'On Bus', color: 'bg-blue-100 text-blue-800' },
+      'picked_up': { label: 'Picked Up', color: 'bg-yellow-100 text-yellow-800' },
+      'dropped': { label: 'Dropped', color: 'bg-gray-100 text-gray-800' },
+      'inactive': { label: 'Inactive', color: 'bg-red-100 text-red-800' },
+      'Missing': { label: 'Missing', color: 'bg-red-100 text-red-800' },
+      'Leave': { label: 'Leave', color: 'bg-yellow-100 text-yellow-800' },
+      'Active': { label: 'Active', color: 'bg-green-100 text-green-800' }
+    }
+    const statusInfo = statusMap[status] || { label: status || 'Unknown', color: 'bg-gray-100 text-gray-800' }
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+        {statusInfo.label}
+      </span>
+    )
+  }
+
   const filteredParents = parents.filter((parent) => {
     const searchLower = searchTerm.toLowerCase()
     return (
@@ -186,8 +215,13 @@ const Parents = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {parent.sid?.name || 'N/A'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {parent.students?.length || 0} child(ren)
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => handleViewStudents(parent)}
+                            className="text-sm text-gray-900 hover:text-primary-600 hover:underline transition-colors cursor-pointer"
+                          >
+                            {parent.students?.length || 0} child(ren)
+                          </button>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
@@ -317,6 +351,116 @@ const Parents = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Students Modal */}
+        {showStudentsModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-slide-up">
+              <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-white flex items-center space-x-2">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <span>Children of {selectedParentName}</span>
+                  </h2>
+                  <button
+                    onClick={() => setShowStudentsModal(false)}
+                    className="text-white hover:text-gray-200 transition-colors p-2 rounded-lg hover:bg-white/20"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1">
+                {selectedParentStudents.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-600 font-medium">No children registered</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedParentStudents.map((student) => (
+                      <div
+                        key={student._id || student.id}
+                        className="bg-gradient-to-br from-white to-gray-50 rounded-xl border-2 border-gray-200 p-5 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
+                      >
+                        <div className="flex items-center space-x-4 mb-4">
+                          {student.photo ? (
+                            <img 
+                              src={
+                                student.photo.startsWith('http') || student.photo.startsWith('data:image') 
+                                  ? student.photo 
+                                  : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`
+                              } 
+                              alt={student.name}
+                              className="w-16 h-16 rounded-full object-cover border-2 border-primary-200"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-bold text-xl shadow-md ${student.photo ? 'hidden' : ''}`}
+                          >
+                            {student.name?.charAt(0)?.toUpperCase() || 'S'}
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="text-lg font-bold text-gray-900">{student.name}</h3>
+                            <p className="text-sm text-gray-600">{student.grade || 'No grade assigned'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">Status:</span>
+                            {getStatusBadge(student.status)}
+                          </div>
+                          
+                          {student.route && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-700">Route:</span>
+                              <span className="text-sm text-gray-900 font-semibold">{student.route.name || student.route}</span>
+                            </div>
+                          )}
+                          
+                          {student.address && (
+                            <div className="flex items-start justify-between">
+                              <span className="text-sm font-medium text-gray-700">Address:</span>
+                              <span className="text-sm text-gray-900 text-right max-w-[200px]">{student.address}</span>
+                            </div>
+                          )}
+                          
+                          {student.sid && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-700">School:</span>
+                              <span className="text-sm text-gray-900">{student.sid.name || student.sid}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <button
+                  onClick={() => setShowStudentsModal(false)}
+                  className="w-full px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 transition-all duration-200 transform hover:scale-105"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

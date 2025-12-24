@@ -102,7 +102,7 @@ const DriverLayout = ({ children }) => {
       <div className="flex relative">
         {/* Sidebar */}
         <aside
-          className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white shadow-lg lg:shadow-sm min-h-[calc(100vh-73px)] border-r border-gray-200 transform transition-transform duration-300 ease-in-out ${
+          className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-green-600 shadow-lg lg:shadow-sm min-h-[calc(100vh-73px)] border-r border-green-700 transform transition-transform duration-300 ease-in-out ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           }`}
         >
@@ -114,8 +114,8 @@ const DriverLayout = ({ children }) => {
                     onClick={() => handleNavClick(item.path)}
                     className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition-all duration-200 flex items-center space-x-2 sm:space-x-3 ${
                       isActive(item.path)
-                        ? 'bg-green-50 text-green-700 font-semibold border border-green-200'
-                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-green-800 text-white font-semibold border border-green-700'
+                        : 'text-white hover:bg-green-700 hover:text-white'
                     }`}
                   >
                     <span className="text-lg sm:text-xl">{item.icon}</span>

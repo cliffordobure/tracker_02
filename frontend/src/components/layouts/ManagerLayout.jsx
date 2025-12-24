@@ -141,21 +141,21 @@ const ManagerLayout = ({ children }) => {
         {/* Sidebar */}
         <aside
           className={`
-            fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
+            fixed inset-y-0 left-0 z-50 w-64 bg-green-600 shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           `}
         >
           {/* Mobile Sidebar Header */}
-          <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-primary-50 to-yellow-50">
+          <div className="lg:hidden flex items-center justify-between p-4 border-b border-green-700">
             <div className="flex items-center space-x-3">
               <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 p-1.5 shadow-md">
                 <img src={logo} alt="Logo" className="h-full w-full object-contain" />
               </div>
-              <span className="text-lg font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">Menu</span>
+              <span className="text-lg font-bold text-white">Menu</span>
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="p-2 rounded-lg text-gray-600 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200"
+              className="p-2 rounded-lg text-white hover:text-gray-200 hover:bg-green-700 transition-all duration-200"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -164,7 +164,7 @@ const ManagerLayout = ({ children }) => {
           </div>
 
           {/* Mobile User Info */}
-          <div className="lg:hidden p-4 border-b border-gray-200 bg-gradient-to-br from-primary-50 via-yellow-50 to-primary-50">
+          <div className="lg:hidden p-4 border-b border-green-700 bg-green-700">
             <div className="flex items-center space-x-3 mb-3">
               <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center ring-2 ring-primary-100 shadow-md">
                 <span className="text-white font-bold text-xl">
@@ -172,13 +172,13 @@ const ManagerLayout = ({ children }) => {
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-800 truncate">{user?.name}</p>
-                <p className="text-xs text-gray-600 truncate">{user?.email}</p>
+                <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
+                <p className="text-xs text-green-100 truncate">{user?.email}</p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-2.5 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:from-gray-200 hover:to-gray-300 transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm hover:shadow-md border border-gray-200"
+              className="w-full px-4 py-2.5 bg-green-500 text-white rounded-lg text-sm font-semibold hover:bg-green-400 transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm hover:shadow-md"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -201,8 +201,8 @@ const ManagerLayout = ({ children }) => {
                       w-full text-left px-4 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-3
                       ${
                         isActive(item.path)
-                          ? 'bg-primary-600 text-white shadow-md'
-                          : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
+                          ? 'bg-green-800 text-white shadow-md'
+                          : 'text-white hover:bg-green-700 hover:text-white'
                       }
                     `}
                   >
