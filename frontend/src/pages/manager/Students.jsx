@@ -382,21 +382,25 @@ const Students = () => {
                         className="hover:bg-gradient-to-r hover:from-primary-50 hover:to-transparent transition-all duration-200 animate-slide-up"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {student.photo && student.photo.trim() && !student.photo.startsWith('data:image') ? (
-                            <img
-                              src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`}
-                              alt={student.name}
-                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-200"
-                              onError={(e) => {
-                                e.target.style.display = 'none'
-                                e.target.nextSibling.style.display = 'flex'
-                              }}
-                            />
-                          ) : null}
-                          <div
-                            className={`w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ${student.photo && student.photo.trim() && !student.photo.startsWith('data:image') ? 'hidden' : ''}`}
-                          >
-                            {student.name?.charAt(0)?.toUpperCase() || 'S'}
+                          <div className="relative">
+                            {student.photo && student.photo.trim() ? (
+                              <img
+                                src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`}
+                                alt={student.name}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 shadow-md"
+                                onError={(e) => {
+                                  e.target.style.display = 'none'
+                                  if (e.target.nextSibling) {
+                                    e.target.nextSibling.style.display = 'flex'
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className={`w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ${student.photo && student.photo.trim() ? 'hidden' : ''}`}
+                            >
+                              {student.name?.charAt(0)?.toUpperCase() || 'S'}
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
