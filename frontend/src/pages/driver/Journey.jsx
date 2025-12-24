@@ -14,7 +14,21 @@ const Journey = () => {
 
   useEffect(() => {
     dispatch(fetchRoute())
-    dispatch(fetchJourneyStatus()) // Check for active journey on mount
+    // Check for active journey on mount and set interval to keep it synced
+    const checkJourneyStatus = async () => {
+      const result = await dispatch(fetchJourneyStatus())
+      if (result.payload?.hasActiveJourney) {
+        setIsJourneyActive(true)
+        setHasActiveJourneyError(false)
+      } else {
+        setIsJourneyActive(false)
+        setHasActiveJourneyError(false)
+      }
+    }
+    checkJourneyStatus()
+    // Check every 10 seconds to keep in sync with mobile app
+    const interval = setInterval(checkJourneyStatus, 10000)
+    return () => clearInterval(interval)
   }, [dispatch])
 
   useEffect(() => {
@@ -39,8 +53,13 @@ const Journey = () => {
       // Check if error is about active journey
       if (error && (error.includes('active trip') || error.includes('active journey'))) {
         setHasActiveJourneyError(true)
+        setIsJourneyActive(true) // Set as active so button shows
         // Refresh journey status to get the active journey
-        dispatch(fetchJourneyStatus())
+        dispatch(fetchJourneyStatus()).then((result) => {
+          if (result.payload?.hasActiveJourney) {
+            setIsJourneyActive(true)
+          }
+        })
       }
       toast.error(error || 'Failed to start journey')
     }
@@ -120,44 +139,36 @@ const Journey = () => {
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">Journey Control</h2>
           {(hasActiveJourneyError || isJourneyActive) ? (
             <div className="space-y-4">
-              {hasActiveJourneyError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-red-900">Active Journey Detected</p>
-                      <p className="text-sm text-red-700 mt-1">
-                        You have an active journey. Please end it before starting a new one.
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleEndJourney}
-                      disabled={journeyLoading}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base"
-                    >
-                      {journeyLoading ? 'Ending...' : 'End Active Journey'}
-                    </button>
+              <div className={`${hasActiveJourneyError ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'} border-2 rounded-lg p-4`}>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex-1">
+                    <p className={`font-semibold ${hasActiveJourneyError ? 'text-red-900' : 'text-green-900'}`}>
+                      {hasActiveJourneyError ? '⚠️ Active Journey Detected' : '✅ Journey Active'}
+                    </p>
+                    <p className={`text-sm mt-1 ${hasActiveJourneyError ? 'text-red-700' : 'text-green-700'}`}>
+                      {hasActiveJourneyError 
+                        ? 'You have an active journey. Please end it before starting a new one.'
+                        : `Type: ${currentJourney?.journeyType === 'pickup' ? 'Pickup' : currentJourney?.journeyType === 'drop-off' ? 'Drop-off' : journeyType === 'pickup' ? 'Pickup' : 'Drop-off'}`
+                      }
+                      {currentJourney?.startedAt && (
+                        <span className="block mt-1 text-xs">
+                          Started: {new Date(currentJourney.startedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </p>
                   </div>
+                  <button
+                    onClick={handleEndJourney}
+                    disabled={journeyLoading}
+                    className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base shadow-md hover:shadow-lg flex items-center space-x-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>{journeyLoading ? 'Ending...' : 'End Journey'}</span>
+                  </button>
                 </div>
-              )}
-              {isJourneyActive && !hasActiveJourneyError && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-green-900">Journey Active</p>
-                      <p className="text-sm text-green-700 mt-1">
-                        Type: {currentJourney?.journeyType === 'pickup' ? 'Pickup' : currentJourney?.journeyType === 'drop-off' ? 'Drop-off' : journeyType === 'pickup' ? 'Pickup' : 'Drop-off'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleEndJourney}
-                      disabled={journeyLoading}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base"
-                    >
-                      {journeyLoading ? 'Ending...' : 'End Journey'}
-                    </button>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
@@ -193,26 +204,6 @@ const Journey = () => {
               >
                 {journeyLoading ? 'Starting...' : 'Start Journey'}
               </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-green-900">Journey Active</p>
-                    <p className="text-sm text-green-700 mt-1">
-                      Type: {journeyType === 'pickup' ? 'Pickup' : 'Drop-off'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleEndJourney}
-                    disabled={journeyLoading}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm sm:text-base"
-                  >
-                    {journeyLoading ? 'Ending...' : 'End Journey'}
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </div>
