@@ -137,13 +137,17 @@ const Journey = () => {
   const pendingStudents = students.filter(s => 
     !s.pickup && !s.dropped && 
     s.status !== 'dropped' && 
-    s.status !== 'picked_up'
+    s.status !== 'picked_up' &&
+    s.status !== 'skipped'
   )
   const pickedUpStudents = students.filter(s => 
-    s.pickup && !s.dropped
+    s.pickup && !s.dropped && s.status !== 'skipped'
   )
   const droppedStudents = students.filter(s => 
-    s.dropped || s.status === 'dropped'
+    (s.dropped || s.status === 'dropped') && s.status !== 'skipped'
+  )
+  const skippedStudents = students.filter(s => 
+    s.status === 'skipped'
   )
 
   return (
