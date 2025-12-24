@@ -73,6 +73,18 @@ export const dropStudent = createAsyncThunk(
   }
 )
 
+export const skipStudent = createAsyncThunk(
+  'driver/student/skip',
+  async (studentId, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/driver/student/skip', { studentId })
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to skip student')
+    }
+  }
+)
+
 export const fetchJourneyStatus = createAsyncThunk(
   'driver/journey/status',
   async (_, { rejectWithValue }) => {

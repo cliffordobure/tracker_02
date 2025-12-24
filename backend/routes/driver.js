@@ -126,6 +126,22 @@ router.get('/route', async (req, res) => {
       .populate('parents', 'name email phone deviceToken')
       .sort({ name: 1 });
     
+    // Get active journey to check for skipped students
+    const activeJourney = await Journey.findOne({
+      driverId: req.user._id,
+      status: 'in_progress'
+    }).select('students').lean();
+    
+    // Create a map of student journey statuses (skipped, picked_up, dropped, etc.)
+    const journeyStudentStatusMap = {};
+    if (activeJourney && activeJourney.students) {
+      activeJourney.students.forEach(js => {
+        if (js.studentId) {
+          journeyStudentStatusMap[js.studentId.toString()] = js.status || 'pending';
+        }
+      });
+    }
+    
     // Debug logging
     console.log(`🔍 Driver Route Query Debug:`);
     console.log(`   Route ID: ${routeId}`);
@@ -157,19 +173,26 @@ router.get('/route', async (req, res) => {
         name: route.name,
         stops: route.stops
       },
-      students: activeStudents.map(student => ({
-        id: student._id,
-        name: student.name,
-        photo: student.photo,
-        grade: student.grade,
-        address: student.address,
-        latitude: student.latitude,
-        longitude: student.longitude,
-        pickup: student.pickup,
-        dropped: student.dropped,
-        status: student.status,
-        parents: student.parents
-      }))
+      students: activeStudents.map(student => {
+        const studentId = student._id.toString();
+        const journeyStatus = journeyStudentStatusMap[studentId];
+        // Use journey status if available (for skipped), otherwise use student status
+        const finalStatus = journeyStatus === 'skipped' ? 'skipped' : student.status;
+        
+        return {
+          id: student._id,
+          name: student.name,
+          photo: student.photo,
+          grade: student.grade,
+          address: student.address,
+          latitude: student.latitude,
+          longitude: student.longitude,
+          pickup: student.pickup,
+          dropped: student.dropped,
+          status: finalStatus,
+          parents: student.parents
+        };
+      })
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -220,6 +243,17 @@ router.post('/student/drop', (req, res, next) => {
   }
   next();
 }, driverController.markStudentDropped);
+
+// Mark student as skipped (cannot go from start to end)
+router.post('/student/skip', (req, res, next) => {
+  if (req.userRole !== 'driver') {
+    return res.status(403).json({ 
+      success: false,
+      message: 'Access denied' 
+    });
+  }
+  next();
+}, driverController.markStudentSkipped);
 
 // End journey/trip
 router.post('/journey/end', (req, res, next) => {

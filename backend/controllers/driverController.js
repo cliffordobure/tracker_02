@@ -536,6 +536,93 @@ exports.markStudentDropped = async (req, res) => {
   }
 };
 
+// Mark student as skipped (cannot go from start to end)
+exports.markStudentSkipped = async (req, res) => {
+  try {
+    const driverId = req.user._id;
+    const { studentId } = req.body;
+
+    if (!studentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Student ID is required'
+      });
+    }
+
+    // Check if there's an active journey
+    const activeJourney = await Journey.findOne({
+      driverId: driverId,
+      status: 'in_progress'
+    });
+
+    if (!activeJourney) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active journey. Please start a journey first.'
+      });
+    }
+
+    const driver = await Driver.findById(driverId).populate('currentRoute');
+    
+    // Verify student is on driver's route
+    if (!driver.currentRoute) {
+      return res.status(400).json({
+        success: false,
+        message: 'No route assigned to driver'
+      });
+    }
+
+    const route = await Route.findById(driver.currentRoute._id);
+    
+    // Check if student is on route
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+    
+    const routeIdString = driver.currentRoute._id.toString();
+    const studentIdString = studentId.toString();
+    const isStudentOnRoute = route.students.some(id => id.toString() === studentIdString) || 
+                             (student.route && student.route.toString() === routeIdString);
+    
+    if (!isStudentOnRoute) {
+      return res.status(403).json({
+        success: false,
+        message: 'Student is not on your route'
+      });
+    }
+
+    // Update journey student status to skipped
+    const journeyStudent = activeJourney.students.find(
+      s => s.studentId.toString() === studentId
+    );
+    if (journeyStudent) {
+      journeyStudent.status = 'skipped';
+      activeJourney.updatedAt = new Date();
+      await activeJourney.save();
+    }
+
+    res.json({
+      success: true,
+      message: 'Student marked as skipped',
+      student: {
+        id: student._id.toString(),
+        name: student.name
+      }
+    });
+  } catch (error) {
+    console.error('Mark student skipped error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
 // Update driver profile
 exports.updateProfile = async (req, res) => {
   try {

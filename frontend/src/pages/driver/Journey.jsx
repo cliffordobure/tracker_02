@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { fetchRoute, fetchJourneyStatus, startJourney, endJourney, pickupStudent, dropStudent } from '../../store/slices/driverSlice'
+import { fetchRoute, fetchJourneyStatus, startJourney, endJourney, pickupStudent, dropStudent, skipStudent } from '../../store/slices/driverSlice'
 import DriverLayout from '../../components/layouts/DriverLayout'
 import toast from 'react-hot-toast'
 import { BACKEND_URL } from '../../config/api'
@@ -103,11 +103,26 @@ const Journey = () => {
     }
   }
 
+  const handleSkip = async (studentId) => {
+    if (!window.confirm('Are you sure you want to skip this student? They will not be picked up or dropped off.')) {
+      return
+    }
+    try {
+      const result = await dispatch(skipStudent(studentId)).unwrap()
+      toast.success('Student marked as skipped')
+      // Refresh route data to get updated student status
+      await dispatch(fetchRoute())
+    } catch (error) {
+      toast.error(error || 'Failed to skip student')
+    }
+  }
+
   const getStatusBadge = (status) => {
     const statusMap = {
       'pending': { label: 'Pending', color: 'bg-yellow-100 text-yellow-800' },
       'picked_up': { label: 'Picked Up', color: 'bg-green-100 text-green-800' },
-      'dropped': { label: 'Dropped', color: 'bg-gray-100 text-gray-800' }
+      'dropped': { label: 'Dropped', color: 'bg-gray-100 text-gray-800' },
+      'skipped': { label: 'Skipped', color: 'bg-orange-100 text-orange-800' }
     }
     const statusInfo = statusMap[status] || { label: status || 'Unknown', color: 'bg-gray-100 text-gray-800' }
     return (
@@ -260,13 +275,22 @@ const Journey = () => {
                         {student.address && (
                           <p className="text-xs text-gray-600 mt-2 truncate">📍 {student.address}</p>
                         )}
-                        {isJourneyActive && !student.pickup && (
-                          <button
-                            onClick={() => handlePickup(student.id)}
-                            className="w-full mt-3 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
-                          >
-                            Mark as Picked Up
-                          </button>
+                        {isJourneyActive && !student.pickup && student.status !== 'skipped' && (
+                          <div className="flex space-x-2 mt-3">
+                            <button
+                              onClick={() => handlePickup(student.id)}
+                              className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+                            >
+                              Mark as Picked Up
+                            </button>
+                            <button
+                              onClick={() => handleSkip(student.id)}
+                              className="px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm"
+                              title="Skip student (cannot go from start to end)"
+                            >
+                              Skip
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -370,7 +394,49 @@ const Journey = () => {
                 </div>
               )}
 
-              {pendingStudents.length === 0 && pickedUpStudents.length === 0 && droppedStudents.length === 0 && (
+              {/* Skipped Students */}
+              {skippedStudents.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Skipped ({skippedStudents.length})</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {skippedStudents.map((student) => (
+                      <div
+                        key={student.id}
+                        className="border border-orange-200 bg-orange-50 rounded-lg p-3 sm:p-4"
+                      >
+                        <div className="flex items-center space-x-3 mb-3">
+                          {student.photo ? (
+                            <img 
+                              src={student.photo.startsWith('http') || student.photo.startsWith('data:image') ? student.photo : `${BACKEND_URL}${student.photo.startsWith('/') ? '' : '/'}${student.photo}`} 
+                              alt={student.name}
+                              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-gray-200 flex-shrink-0"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0 ${student.photo ? 'hidden' : ''}`}
+                          >
+                            {student.name?.charAt(0)?.toUpperCase() || 'S'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{student.name}</h3>
+                            <p className="text-xs sm:text-sm text-gray-600 truncate">{student.grade || 'No grade'}</p>
+                          </div>
+                        </div>
+                        {getStatusBadge(student.status)}
+                        {student.address && (
+                          <p className="text-xs text-gray-600 mt-2 truncate">📍 {student.address}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {pendingStudents.length === 0 && pickedUpStudents.length === 0 && droppedStudents.length === 0 && skippedStudents.length === 0 && (
                 <div className="text-center py-8">
                   <p className="text-gray-500 text-sm sm:text-base">No students assigned to this route</p>
                 </div>
