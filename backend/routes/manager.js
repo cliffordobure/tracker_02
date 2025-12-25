@@ -11,7 +11,10 @@ const DriverRating = require('../models/DriverRating');
 const Journey = require('../models/Journey');
 const Noticeboard = require('../models/Noticeboard');
 const Notification = require('../models/Notification');
+const LeaveRequest = require('../models/LeaveRequest');
 const { getSocketIO } = require('../services/socketService');
+const { emitNotification } = require('../utils/socketHelper');
+const { sendToDevice } = require('../services/firebaseService');
 
 router.use(authenticate);
 router.use(authorize('manager'));
@@ -1935,6 +1938,199 @@ router.put('/students/:id/activate', async (req, res) => {
     res.json({ message: 'Student activated successfully', student });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Approve or reject leave request
+router.put('/leave-requests/:leaveRequestId/review', async (req, res) => {
+  try {
+    const { leaveRequestId } = req.params;
+    const { status, reviewNotes } = req.body; // status: 'approved' or 'rejected'
+
+    // Validate status
+    if (!status || !['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status must be either "approved" or "rejected"'
+      });
+    }
+
+    // Find leave request
+    const leaveRequest = await LeaveRequest.findById(leaveRequestId)
+      .populate('studentId', 'name sid status')
+      .populate('parentId', 'name deviceToken');
+
+    if (!leaveRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Leave request not found'
+      });
+    }
+
+    // Verify leave request belongs to manager's school
+    if (leaveRequest.studentId.sid.toString() !== req.user.sid.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This leave request does not belong to your school.'
+      });
+    }
+
+    // Check if already reviewed
+    if (leaveRequest.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Leave request has already been ${leaveRequest.status}`
+      });
+    }
+
+    // Update leave request
+    leaveRequest.status = status;
+    leaveRequest.reviewedBy = req.user._id;
+    leaveRequest.reviewedAt = new Date();
+    leaveRequest.reviewNotes = reviewNotes || '';
+    await leaveRequest.save();
+
+    // If approved, update student status to 'Leave'
+    if (status === 'approved' && leaveRequest.studentId) {
+      const student = await Student.findById(leaveRequest.studentId._id);
+      if (student) {
+        student.status = 'Leave';
+        student.leftSchool = leaveRequest.startDate.toISOString();
+        student.leftSchoolBy = req.user._id;
+        student.updatedAt = new Date();
+        await student.save();
+      }
+    }
+
+    // Prepare notification data
+    const student = leaveRequest.studentId;
+    const parent = leaveRequest.parentId;
+    const startDateStr = leaveRequest.startDate.toISOString().split('T')[0];
+    const endDateStr = leaveRequest.endDate.toISOString().split('T')[0];
+    
+    const notificationMessage = status === 'approved'
+      ? `✅ Your leave request for ${student.name} (${startDateStr} to ${endDateStr}) has been approved${reviewNotes ? `. Note: ${reviewNotes}` : ''}`
+      : `❌ Your leave request for ${student.name} (${startDateStr} to ${endDateStr}) has been rejected${reviewNotes ? `. Reason: ${reviewNotes}` : ''}`;
+
+    const notificationType = status === 'approved' ? 'leave_request_approved' : 'leave_request_rejected';
+
+    // Send notification to parent via Socket.IO
+    const io = getSocketIO();
+    const notificationData = {
+      type: notificationType,
+      leaveRequestId: leaveRequest._id.toString(),
+      studentId: student._id.toString(),
+      studentName: student.name,
+      status: status,
+      startDate: leaveRequest.startDate.toISOString(),
+      endDate: leaveRequest.endDate.toISOString(),
+      reviewNotes: reviewNotes || '',
+      timestamp: new Date().toISOString()
+    };
+
+    // Send Socket.IO notification
+    emitNotification(io, `parent:${parent._id}`, notificationData);
+
+    // Create database notification
+    await Notification.create({
+      pid: parent._id,
+      sid: student.sid,
+      studentId: student._id,
+      message: notificationMessage,
+      type: notificationType
+    });
+
+    // Send FCM push notification to parent
+    if (parent.deviceToken && parent.deviceToken.trim() !== '') {
+      try {
+        await sendToDevice(
+          parent.deviceToken,
+          notificationMessage,
+          {
+            type: notificationType,
+            leaveRequestId: leaveRequest._id.toString(),
+            studentId: student._id.toString(),
+            studentName: student.name,
+            status: status,
+            startDate: leaveRequest.startDate.toISOString(),
+            endDate: leaveRequest.endDate.toISOString(),
+            reviewNotes: reviewNotes || ''
+          },
+          status === 'approved' ? '✅ Leave Request Approved' : '❌ Leave Request Rejected'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to parent:', fcmError);
+        // Don't fail the request if FCM fails
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Leave request ${status} successfully`,
+      data: {
+        id: leaveRequest._id.toString(),
+        studentId: student._id.toString(),
+        studentName: student.name,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        status: leaveRequest.status,
+        reviewedBy: req.user._id.toString(),
+        reviewedAt: leaveRequest.reviewedAt,
+        reviewNotes: leaveRequest.reviewNotes
+      }
+    });
+  } catch (error) {
+    console.error('Error reviewing leave request:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Get pending leave requests for manager's school
+router.get('/leave-requests/pending', async (req, res) => {
+  try {
+    const leaveRequests = await LeaveRequest.find({
+      status: 'pending'
+    })
+      .populate('studentId', 'name grade photo sid')
+      .populate('parentId', 'name email phone')
+      .sort({ createdAt: -1 });
+
+    // Filter by manager's school
+    const filteredRequests = leaveRequests.filter(
+      req => req.studentId && req.studentId.sid && req.studentId.sid.toString() === req.user.sid.toString()
+    );
+
+    const formattedRequests = filteredRequests.map(req => ({
+      id: req._id.toString(),
+      studentId: req.studentId._id.toString(),
+      studentName: req.studentId.name,
+      studentGrade: req.studentId.grade,
+      parentId: req.parentId._id.toString(),
+      parentName: req.parentId.name,
+      parentEmail: req.parentId.email,
+      startDate: req.startDate.toISOString().split('T')[0],
+      endDate: req.endDate.toISOString().split('T')[0],
+      reason: req.reason,
+      status: req.status,
+      createdAt: req.createdAt
+    }));
+
+    res.json({
+      success: true,
+      message: 'Pending leave requests retrieved successfully',
+      data: formattedRequests
+    });
+  } catch (error) {
+    console.error('Error fetching pending leave requests:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
   }
 });
 

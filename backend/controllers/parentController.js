@@ -282,7 +282,7 @@ exports.requestStudentLeave = async (req, res) => {
         startDate: start.toISOString(),
         endDate: end.toISOString(),
         reason: reason || '',
-        timestamp: new Date()
+        timestamp: new Date().toISOString()
       });
     }
 

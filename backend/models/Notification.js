@@ -32,7 +32,10 @@ const notificationSchema = new mongoose.Schema({
       'student_dropped',
       'student_on_leave',
       'student_missing',
-      'student_active'
+      'student_active',
+      'leave_request',
+      'leave_request_approved',
+      'leave_request_rejected'
     ],
     default: 'general'
   },

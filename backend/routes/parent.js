@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, verifyParent } = require('../middleware/auth');
 const Parent = require('../models/Parent');
 const Student = require('../models/Student');
 const Driver = require('../models/Driver');
@@ -2013,10 +2013,10 @@ router.post('/driver/rate', async (req, res) => {
 router.get('/students/:studentId/history', parentController.getStudentHistory);
 
 // Request student leave (new implementation with LeaveRequest model)
-router.post('/students/:studentId/leave-request', parentController.requestStudentLeave);
+router.post('/students/:studentId/leave-request', verifyParent, parentController.requestStudentLeave);
 
 // Activate student (new implementation)
-router.post('/students/:studentId/activate', parentController.activateStudent);
+router.post('/students/:studentId/activate', verifyParent, parentController.activateStudent);
 
 // Request leave for student (legacy endpoint - kept for backward compatibility)
 router.post('/students/:studentId/request-leave', async (req, res) => {

@@ -64,5 +64,51 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { authenticate, authorize };
+// Verify parent authentication and active status
+// Note: This middleware should be used AFTER authenticate middleware
+const verifyParent = async (req, res, next) => {
+  try {
+    // Check if user is authenticated (should be set by authenticate middleware)
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in again.'
+      });
+    }
+    
+    // Verify user is a parent
+    if (req.userRole !== 'parent') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This endpoint is only for parents.'
+      });
+    }
+    
+    // Check if parent account is active
+    const parent = await Parent.findById(req.user._id);
+    if (!parent) {
+      return res.status(404).json({
+        success: false,
+        message: 'Parent not found'
+      });
+    }
+    
+    if (parent.status && parent.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        message: `Parent account is ${parent.status}. Please contact administrator to activate your account.`
+      });
+    }
+    
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+module.exports = { authenticate, authorize, verifyParent };
 
