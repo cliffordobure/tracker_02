@@ -408,6 +408,12 @@ router.get('/journey/history', async (req, res) => {
 // Get driver's manager
 router.get('/manager', verifyDriver, driverController.getManager);
 
+// Get parents list (for messaging)
+router.get('/parents', verifyDriver, driverController.getParents);
+
+// Get students list (for messaging)
+router.get('/students', verifyDriver, driverController.getStudents);
+
 // ==================== DRIVER MESSAGING ENDPOINTS ====================
 // IMPORTANT: Route order is critical! Specific routes MUST come before parameterized routes.
 // Express matches routes in order, so /messages/:id would match /messages/inbox if defined first.

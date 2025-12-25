@@ -5,6 +5,7 @@ const Route = require('../models/Route');
 const Parent = require('../models/Parent');
 const Manager = require('../models/Manager');
 const Notification = require('../models/Notification');
+const mongoose = require('mongoose');
 const { getSocketIO } = require('../services/socketService');
 const { sendPushNotification } = require('../services/firebaseService');
 const { emitNotification } = require('../utils/socketHelper');
@@ -753,6 +754,246 @@ exports.getManager = async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting manager for driver:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// Get parents list for driver (for messaging)
+// Returns parents whose children are on the driver's current route
+exports.getParents = async (req, res) => {
+  try {
+    console.log('📥 Driver getParents called');
+    
+    const driver = req.driver;
+    const driverSid = driver.sid;
+
+    if (!driverSid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Driver does not have a school ID assigned'
+      });
+    }
+
+    // Get driver's current route
+    const driverWithRoute = await Driver.findById(driver._id).populate('currentRoute');
+    
+    if (!driverWithRoute.currentRoute) {
+      // If no route assigned, return empty array
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No route assigned to driver'
+      });
+    }
+
+    const routeId = driverWithRoute.currentRoute._id;
+    
+    // Get route with students to check Route.students array
+    const route = await Route.findById(routeId).select('students').lean();
+    const routeStudentIds = route?.students || [];
+
+    // Build query to find students on driver's route
+    // Students can be on route either by:
+    // 1. Student.route field matching routeId
+    // 2. Student._id in Route.students array
+    const query = {
+      $or: [
+        { route: routeId },
+        ...(routeStudentIds.length > 0 ? [{ _id: { $in: routeStudentIds } }] : [])
+      ],
+      isdelete: false,
+      status: { $ne: 'Leave' },
+      sid: driverSid
+    };
+
+    // If no students in Route.students array, only query by route field
+    if (routeStudentIds.length === 0) {
+      delete query.$or;
+      query.route = routeId;
+    }
+
+    // Find all students on driver's route
+    const studentsOnRoute = await Student.find(query)
+      .select('_id name grade photo status parents')
+      .populate({
+        path: 'parents',
+        select: '_id name email phone photo status',
+        match: { status: 'Active' }
+      })
+      .sort({ name: 1 });
+
+    // Get all unique parent IDs from students on route
+    const parentIds = new Set();
+    studentsOnRoute.forEach(student => {
+      if (student.parents && Array.isArray(student.parents)) {
+        student.parents.forEach(parent => {
+          if (parent && parent.status === 'Active') {
+            parentIds.add(parent._id.toString());
+          }
+        });
+      }
+    });
+
+    if (parentIds.size === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No parents found for students on your route'
+      });
+    }
+
+    // Convert to array of ObjectIds
+    const parentObjectIds = Array.from(parentIds)
+      .map(id => {
+        try {
+          return new mongoose.Types.ObjectId(id);
+        } catch (e) {
+          return null;
+        }
+      })
+      .filter(id => id !== null);
+
+    // Get parents of students on driver's route
+    const parents = await Parent.find({ 
+      _id: { $in: parentObjectIds },
+      status: 'Active'
+    })
+      .select('_id name email phone photo status sid')
+      .sort({ name: 1 });
+
+    // For each parent, get their students that are on the driver's route
+    const parentsWithStudents = await Promise.all(
+      parents.map(async (parent) => {
+        // Get students of this parent that are on the driver's route
+        const students = studentsOnRoute.filter(student => {
+          if (!student.parents || !Array.isArray(student.parents)) {
+            return false;
+          }
+          return student.parents.some(p => p._id.toString() === parent._id.toString());
+        });
+
+        return {
+          _id: parent._id,
+          id: parent._id.toString(),
+          name: parent.name,
+          email: parent.email,
+          phone: parent.phone || null,
+          photo: parent.photo || null,
+          status: parent.status,
+          students: students.map(student => ({
+            _id: student._id,
+            id: student._id.toString(),
+            name: student.name,
+            grade: student.grade || null,
+            photo: student.photo || null,
+            status: student.status
+          })),
+          sid: parent.sid ? parent.sid.toString() : null
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: parentsWithStudents
+    });
+  } catch (error) {
+    console.error('Error getting parents for driver:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// Get students list for driver (for messaging)
+// Returns students on the driver's current route
+exports.getStudents = async (req, res) => {
+  try {
+    const driver = req.driver;
+    const driverSid = driver.sid;
+
+    if (!driverSid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Driver does not have a school ID assigned'
+      });
+    }
+
+    // Get driver's current route
+    const driverWithRoute = await Driver.findById(driver._id).populate('currentRoute');
+    
+    if (!driverWithRoute.currentRoute) {
+      // If no route assigned, return empty array
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No route assigned to driver'
+      });
+    }
+
+    const routeId = driverWithRoute.currentRoute._id;
+    
+    // Get route with students to check Route.students array
+    const route = await Route.findById(routeId).select('students').lean();
+    const routeStudentIds = route?.students || [];
+
+    // Build query to find students on driver's route
+    const query = {
+      $or: [
+        { route: routeId },
+        ...(routeStudentIds.length > 0 ? [{ _id: { $in: routeStudentIds } }] : [])
+      ],
+      isdelete: false,
+      status: { $ne: 'Leave' },
+      sid: driverSid
+    };
+
+    // If no students in Route.students array, only query by route field
+    if (routeStudentIds.length === 0) {
+      delete query.$or;
+      query.route = routeId;
+    }
+
+    // Find all active students on driver's route
+    const students = await Student.find(query)
+      .select('_id name grade photo status parents')
+      .populate({
+        path: 'parents',
+        select: '_id name email phone photo status',
+        match: { status: 'Active' }
+      })
+      .sort({ name: 1 });
+
+    // Format response
+    const formattedStudents = students.map(student => ({
+      _id: student._id,
+      id: student._id.toString(),
+      name: student.name,
+      grade: student.grade || null,
+      photo: student.photo || null,
+      status: student.status,
+      parents: (student.parents || []).map(parent => ({
+        _id: parent._id,
+        id: parent._id.toString(),
+        name: parent.name,
+        email: parent.email,
+        phone: parent.phone || null,
+        photo: parent.photo || null
+      }))
+    }));
+
+    res.json({
+      success: true,
+      data: formattedStudents
+    });
+  } catch (error) {
+    console.error('Error getting students for driver:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
