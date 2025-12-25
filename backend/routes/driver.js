@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, verifyDriver } = require('../middleware/auth');
 const Driver = require('../models/Driver');
 const Route = require('../models/Route');
 const Student = require('../models/Student');
@@ -405,6 +405,9 @@ router.get('/journey/history', async (req, res) => {
   }
 });
 
+// Get driver's manager
+router.get('/manager', verifyDriver, driverController.getManager);
+
 // ==================== DRIVER MESSAGING ENDPOINTS ====================
 // IMPORTANT: Route order is critical! Specific routes MUST come before parameterized routes.
 // Express matches routes in order, so /messages/:id would match /messages/inbox if defined first.
@@ -432,17 +435,17 @@ const logRoute = (method, path, emoji = '📥') => {
 };
 
 // Specific routes first (must come before parameterized routes)
-router.get('/messages/inbox', logRoute('GET', '/messages/inbox'), getInbox);
-router.get('/messages/outbox', logRoute('GET', '/messages/outbox'), getOutbox);
-router.put('/messages/read-all', logRoute('PUT', '/messages/read-all'), markAllAsRead);
+router.get('/messages/inbox', verifyDriver, logRoute('GET', '/messages/inbox'), getInbox);
+router.get('/messages/outbox', verifyDriver, logRoute('GET', '/messages/outbox'), getOutbox);
+router.put('/messages/read-all', verifyDriver, logRoute('PUT', '/messages/read-all'), markAllAsRead);
 
 // Parameterized routes (must come after specific routes)
-router.put('/messages/:id/read', logRoute('PUT', '/messages/:id/read'), markAsRead);
-router.post('/messages/:id/reply', logRoute('POST', '/messages/:id/reply'), replyToMessage);
-router.get('/messages/:id', logRoute('GET', '/messages/:id'), getMessage);
+router.put('/messages/:id/read', verifyDriver, logRoute('PUT', '/messages/:id/read'), markAsRead);
+router.post('/messages/:id/reply', verifyDriver, logRoute('POST', '/messages/:id/reply'), replyToMessage);
+router.get('/messages/:id', verifyDriver, logRoute('GET', '/messages/:id'), getMessage);
 
 // General routes last (must come after all specific and parameterized routes)
-router.get('/messages', logRoute('GET', '/messages'), getInbox); // GET inbox (default)
-router.post('/messages', logRoute('POST', '/messages'), sendMessage); // POST send message
+router.get('/messages', verifyDriver, logRoute('GET', '/messages'), getInbox); // GET inbox (default)
+router.post('/messages', verifyDriver, logRoute('POST', '/messages'), sendMessage); // POST send message
 
 module.exports = router;

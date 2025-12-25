@@ -1757,11 +1757,15 @@ router.post('/messages/:messageId/reply', async (req, res) => {
     let recipient = null;
     let recipientDeviceToken = null;
 
-    if (originalMessage.to === 'driver') {
-      recipient = await Driver.findById(originalMessage.toId);
+    if (originalMessage.from === 'manager') {
+      const Manager = require('../models/Manager');
+      recipient = await Manager.findById(originalMessage.fromId);
       recipientDeviceToken = recipient?.deviceToken;
-    } else if (originalMessage.to === 'teacher') {
-      recipient = await Staff.findById(originalMessage.toId);
+    } else if (originalMessage.from === 'driver') {
+      recipient = await Driver.findById(originalMessage.fromId);
+      recipientDeviceToken = recipient?.deviceToken;
+    } else if (originalMessage.from === 'teacher') {
+      recipient = await Staff.findById(originalMessage.fromId);
       recipientDeviceToken = recipient?.deviceToken;
     }
 
@@ -1769,25 +1773,15 @@ router.post('/messages/:messageId/reply', async (req, res) => {
       const notificationMessage = `💬 Reply from ${parent.name}`;
 
       // Send Socket.io notification
-      if (originalMessage.to === 'driver') {
-        io.to(`driver:${recipient._id}`).emit('notification', {
-          type: 'message',
-          messageId: reply._id,
-          from: parent.name,
-          fromType: 'parent',
-          subject: reply.subject,
-          timestamp: new Date().toISOString()
-        });
-      } else if (originalMessage.to === 'teacher') {
-        io.to(`teacher:${recipient._id}`).emit('notification', {
-          type: 'message',
-          messageId: reply._id,
-          from: parent.name,
-          fromType: 'parent',
-          subject: reply.subject,
-          timestamp: new Date().toISOString()
-        });
-      }
+      const roomName = `${originalMessage.from}:${originalMessage.fromId}`;
+      io.to(roomName).emit('notification', {
+        type: 'message',
+        messageId: reply._id,
+        from: parent.name,
+        fromType: 'parent',
+        subject: reply.subject,
+        timestamp: new Date().toISOString()
+      });
 
       // Send FCM notification
       if (recipientDeviceToken && recipientDeviceToken.trim() !== '') {
@@ -1801,7 +1795,8 @@ router.post('/messages/:messageId/reply', async (req, res) => {
               fromId: parent._id.toString(),
               fromName: parent.name,
               fromType: 'parent',
-              subject: reply.subject
+              subject: reply.subject,
+              studentId: originalMessage.studentId || null
             },
             '💬 New Reply'
           );

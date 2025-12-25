@@ -1775,10 +1775,13 @@ router.post('/messages/:id/reply', async (req, res) => {
     originalMessage.readAt = new Date();
     await originalMessage.save();
     
-    // Notify recipient via Socket.io
+    // Notify recipient via Socket.io and FCM
     const { getSocketIO } = require('../services/socketService');
+    const { sendToDevice } = require('../services/firebaseService');
     const io = getSocketIO();
-    io.to(`${originalMessage.from}:${originalMessage.fromId}`).emit('notification', {
+    const roomName = `${originalMessage.from}:${originalMessage.fromId}`;
+    
+    io.to(roomName).emit('notification', {
       type: 'message',
       messageId: reply._id,
       from: req.user.name,
@@ -1786,6 +1789,41 @@ router.post('/messages/:id/reply', async (req, res) => {
       subject: reply.subject,
       timestamp: new Date().toISOString()
     });
+    
+    // Send FCM notification to recipient
+    let recipient;
+    let recipientDeviceToken = null;
+    if (originalMessage.from === 'parent') {
+      const Parent = require('../models/Parent');
+      recipient = await Parent.findById(originalMessage.fromId);
+      recipientDeviceToken = recipient?.deviceToken;
+    } else if (originalMessage.from === 'driver') {
+      const Driver = require('../models/Driver');
+      recipient = await Driver.findById(originalMessage.fromId);
+      recipientDeviceToken = recipient?.deviceToken;
+    }
+    
+    if (recipient && recipientDeviceToken && recipientDeviceToken.trim() !== '') {
+      try {
+        const notificationMessage = `💬 Reply from ${req.user.name}`;
+        await sendToDevice(
+          recipientDeviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: reply._id.toString(),
+            fromId: req.user._id.toString(),
+            fromName: req.user.name,
+            fromType: 'manager',
+            subject: reply.subject,
+            studentId: originalMessage.studentId || null
+          },
+          '💬 New Reply'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification for manager reply:', fcmError);
+      }
+    }
     
     res.status(201).json({ message: 'Reply sent successfully', data: reply });
   } catch (error) {
@@ -1847,17 +1885,48 @@ router.post('/messages', async (req, res) => {
     
     await newMessage.save();
     
-    // Notify recipient via Socket.io
+    // Notify recipient via Socket.io and FCM
     const { getSocketIO } = require('../services/socketService');
+    const { sendToDevice } = require('../services/firebaseService');
     const io = getSocketIO();
-    io.to(`${toType}:${recipient._id}`).emit('notification', {
+    const roomName = `${toType}:${recipient._id}`;
+    
+    io.to(roomName).emit('notification', {
       type: 'message',
       messageId: newMessage._id,
       from: req.user.name,
       fromType: 'manager',
       subject: newMessage.subject,
+      studentId: studentId || null,
       timestamp: new Date().toISOString()
     });
+    
+    // Send FCM notification to recipient
+    const recipientDeviceToken = recipient.deviceToken;
+    if (recipientDeviceToken && recipientDeviceToken.trim() !== '') {
+      try {
+        const Student = require('../models/Student');
+        const student = studentId ? await Student.findById(studentId) : null;
+        const notificationMessage = `💬 New message from ${req.user.name}${student ? ` about ${student.name}` : ''}`;
+        
+        await sendToDevice(
+          recipientDeviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: newMessage._id.toString(),
+            fromId: req.user._id.toString(),
+            fromName: req.user.name,
+            fromType: 'manager',
+            subject: newMessage.subject,
+            studentId: studentId || null
+          },
+          '💬 New Message'
+        );
+      } catch (fcmError) {
+        console.error('Error sending FCM notification to recipient:', fcmError);
+      }
+    }
     
     res.status(201).json({
       message: 'Message sent successfully',

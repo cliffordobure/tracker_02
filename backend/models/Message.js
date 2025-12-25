@@ -15,6 +15,10 @@ const messageSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  fromModel: {
+    type: String,
+    trim: true
+  },
   to: {
     type: String,
     enum: ['parent', 'driver', 'manager', 'staff', 'admin', 'teacher'],
@@ -25,6 +29,10 @@ const messageSchema = new mongoose.Schema({
     required: true
   },
   toName: {
+    type: String,
+    trim: true
+  },
+  toModel: {
     type: String,
     trim: true
   },

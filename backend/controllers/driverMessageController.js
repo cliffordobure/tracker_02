@@ -4,6 +4,8 @@ const Parent = require('../models/Parent');
 const Manager = require('../models/Manager');
 const Student = require('../models/Student');
 const { getSocketIO } = require('../services/socketService');
+const { sendToDevice } = require('../services/firebaseService');
+const { emitNotification } = require('../utils/socketHelper');
 
 /**
  * Get driver's inbox messages
@@ -14,25 +16,8 @@ const getInbox = async (req, res) => {
   try {
     console.log('📥 Driver getInbox called');
     
-    const driverId = req.user._id;
+    const driverId = req.driver._id;
     console.log('Driver ID:', driverId);
-    
-    // Validate driver ID
-    if (!driverId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Driver ID not found in token'
-      });
-    }
-    
-    // Verify driver exists
-    const driver = await Driver.findById(driverId);
-    if (!driver) {
-      return res.status(404).json({
-        success: false,
-        message: 'Driver not found'
-      });
-    }
     
     const { fromType = 'all', page = 1, limit = 20 } = req.query;
     console.log('Query params:', { fromType, page, limit });
@@ -117,129 +102,104 @@ const getInbox = async (req, res) => {
  */
 const sendMessage = async (req, res) => {
   try {
-    console.log('📤 Driver sendMessage called');
-    
-    const driverId = req.user._id;
-    console.log('Driver ID:', driverId);
-    
-    // Validate driver ID
+    const { toId, toType, studentId, subject, message, attachments } = req.body;
+    const driverId = req.driver._id;
+    const driverName = req.driver.name;
+
+    // Validation
     if (!driverId) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
-        message: 'Driver ID not found in token'
+        message: 'Driver ID is missing'
       });
     }
-    
-    // Verify driver exists
-    const driver = await Driver.findById(driverId);
-    if (!driver) {
-      return res.status(404).json({
-        success: false,
-        message: 'Driver not found'
-      });
-    }
-    
-    const { toId, toType, message, subject, studentId, attachments } = req.body;
-    console.log('Request body:', { toId, toType, message: message?.substring(0, 50) + '...', subject, studentId });
-    
-    // Validate required fields
+
     if (!toId || !toType || !message) {
       return res.status(400).json({
         success: false,
-        message: 'Recipient ID, type, and message are required'
+        message: 'Missing required fields: toId, toType, and message are required'
       });
     }
-    
-    // Validate recipient type
+
     if (!['parent', 'manager'].includes(toType)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid recipient type. Must be parent or manager'
+        message: 'Invalid recipient type. Must be "parent" or "manager"'
       });
     }
+
+    // Find recipient
+    let recipient, recipientModel, recipientName;
     
-    // Verify recipient exists and belongs to same school
-    let recipient;
     if (toType === 'parent') {
       recipient = await Parent.findById(toId);
-      if (!recipient) {
-        return res.status(404).json({
-          success: false,
-          message: 'Parent not found'
-        });
-      }
-      // Verify parent belongs to driver's school
-      if (recipient.sid && recipient.sid.toString() !== driver.sid.toString()) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied. Parent does not belong to your school.'
-        });
-      }
-      
-      // If studentId is provided, verify student belongs to parent
-      if (studentId) {
-        const student = await Student.findById(studentId);
-        if (!student) {
-          return res.status(404).json({
-            success: false,
-            message: 'Student not found'
-          });
-        }
-        if (!student.parents || !student.parents.includes(toId)) {
-          return res.status(403).json({
-            success: false,
-            message: 'Student does not belong to this parent'
-          });
-        }
-      }
-    } else if (toType === 'manager') {
+      recipientModel = 'Parent';
+      recipientName = recipient?.name || 'Parent';
+    } else {
       recipient = await Manager.findById(toId);
-      if (!recipient) {
-        return res.status(404).json({
+      recipientModel = 'Manager';
+      recipientName = recipient?.name || 'Manager';
+    }
+
+    if (!recipient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Recipient not found'
+      });
+    }
+
+    // Verify recipient belongs to driver's school
+    if (recipient.sid.toString() !== req.driver.sid.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Recipient does not belong to your school.'
+      });
+    }
+
+    // Verify student belongs to parent if studentId is provided
+    if (studentId && toType === 'parent') {
+      const student = await Student.findById(studentId);
+      if (!student || !student.parents.includes(toId)) {
+        return res.status(400).json({
           success: false,
-          message: 'Manager not found'
-        });
-      }
-      // Verify manager belongs to driver's school
-      if (recipient.sid.toString() !== driver.sid.toString()) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied. Manager does not belong to your school.'
+          message: 'Student does not belong to the selected parent'
         });
       }
     }
-    
+
     // Create message
     const newMessage = new Message({
       from: 'driver',
       fromId: driverId,
-      fromName: driver.name,
+      fromModel: 'Driver',
+      fromName: driverName,
       to: toType,
-      toId: recipient._id,
-      toName: recipient.name,
-      studentId: studentId || null,
-      subject: subject || `Message from ${driver.name}`,
-      message,
+      toId: toId,
+      toModel: recipientModel,
+      toName: recipientName,
+      subject: subject || '',
+      message: message,
       type: 'direct',
+      studentId: studentId || null,
       attachments: attachments || []
     });
-    
+
     await newMessage.save();
-    console.log('✅ Message saved with ID:', newMessage._id);
-    
-    // Notify recipient via Socket.io
+
+    // Send socket notification
     const io = getSocketIO();
-    const roomName = `${toType}:${recipient._id}`;
-    io.to(roomName).emit('notification', {
+    const room = toType === 'parent' ? `parent:${toId}` : `manager:${toId}`;
+    
+    emitNotification(io, room, {
       type: 'message',
       messageId: newMessage._id,
-      from: driver.name,
+      from: driverName,
       fromType: 'driver',
       subject: newMessage.subject,
-      timestamp: new Date().toISOString()
+      studentId: studentId || null,
+      timestamp: new Date()
     });
-    console.log(`✅ Socket notification sent to room: ${roomName}`);
-    
+
     res.status(201).json({
       success: true,
       message: 'Message sent successfully',
@@ -247,7 +207,7 @@ const sendMessage = async (req, res) => {
         id: newMessage._id,
         to: {
           id: recipient._id,
-          name: recipient.name,
+          name: recipientName,
           type: toType
         },
         subject: newMessage.subject,
@@ -256,8 +216,7 @@ const sendMessage = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Driver sendMessage error:', error.message);
-    console.error('Error stack:', error.stack);
+    console.error('Driver sendMessage error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -273,7 +232,7 @@ const sendMessage = async (req, res) => {
  */
 const getMessage = async (req, res) => {
   try {
-    const driverId = req.user._id;
+    const driverId = req.driver._id;
     const messageId = req.params.id;
     
     const message = await Message.findById(messageId)
@@ -346,7 +305,7 @@ const getMessage = async (req, res) => {
  */
 const markAsRead = async (req, res) => {
   try {
-    const driverId = req.user._id;
+    const driverId = req.driver._id;
     const messageId = req.params.id;
     
     const message = await Message.findById(messageId);
@@ -396,7 +355,7 @@ const markAsRead = async (req, res) => {
  */
 const markAllAsRead = async (req, res) => {
   try {
-    const driverId = req.user._id;
+    const driverId = req.driver._id;
     
     const result = await Message.updateMany(
       {
@@ -437,7 +396,7 @@ const markAllAsRead = async (req, res) => {
  */
 const replyToMessage = async (req, res) => {
   try {
-    const driverId = req.user._id;
+    const driverId = req.driver._id;
     const messageId = req.params.id;
     const { message: replyText } = req.body;
     
@@ -464,14 +423,8 @@ const replyToMessage = async (req, res) => {
       });
     }
     
-    // Get driver info
-    const driver = await Driver.findById(driverId);
-    if (!driver) {
-      return res.status(404).json({
-        success: false,
-        message: 'Driver not found'
-      });
-    }
+    // Get driver info (already available from verifyDriver middleware)
+    const driver = req.driver;
     
     // Get recipient info
     let recipient;
@@ -497,9 +450,11 @@ const replyToMessage = async (req, res) => {
     const reply = new Message({
       from: 'driver',
       fromId: driverId,
+      fromModel: 'Driver',
       fromName: driver.name,
       to: originalMessage.from,
       toId: originalMessage.fromId,
+      toModel: originalMessage.from === 'parent' ? 'Parent' : 'Manager',
       toName: recipient.name,
       subject: `Re: ${originalMessage.subject || 'Message'}`,
       message: replyText,
@@ -515,9 +470,10 @@ const replyToMessage = async (req, res) => {
     originalMessage.readAt = new Date();
     await originalMessage.save();
     
-    // Notify recipient via Socket.io
+    // Notify recipient via Socket.io and FCM
     const io = getSocketIO();
     const roomName = `${originalMessage.from}:${originalMessage.fromId}`;
+    
     io.to(roomName).emit('notification', {
       type: 'message',
       messageId: reply._id,
@@ -526,6 +482,31 @@ const replyToMessage = async (req, res) => {
       subject: reply.subject,
       timestamp: new Date().toISOString()
     });
+    
+    // Send FCM notification to recipient
+    const recipientDeviceToken = recipient.deviceToken;
+    if (recipientDeviceToken && recipientDeviceToken.trim() !== '') {
+      try {
+        const notificationMessage = `💬 Reply from ${driver.name}`;
+        await sendToDevice(
+          recipientDeviceToken,
+          notificationMessage,
+          {
+            type: 'message',
+            messageId: reply._id.toString(),
+            fromId: driverId.toString(),
+            fromName: driver.name,
+            fromType: 'driver',
+            subject: reply.subject,
+            studentId: originalMessage.studentId || null
+          },
+          '💬 New Reply'
+        );
+        console.log(`✅ FCM notification sent for driver reply to ${originalMessage.from}: ${originalMessage.fromId}`);
+      } catch (fcmError) {
+        console.error('❌ Error sending FCM notification for driver reply:', fcmError);
+      }
+    }
     
     res.status(201).json({
       success: true,
@@ -554,7 +535,7 @@ const replyToMessage = async (req, res) => {
  */
 const getOutbox = async (req, res) => {
   try {
-    const driverId = req.user._id;
+    const driverId = req.driver._id;
     const { toType = 'all', page = 1, limit = 20 } = req.query;
     
     // Build query

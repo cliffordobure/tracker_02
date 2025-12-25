@@ -3,6 +3,7 @@ const Journey = require('../models/Journey');
 const Student = require('../models/Student');
 const Route = require('../models/Route');
 const Parent = require('../models/Parent');
+const Manager = require('../models/Manager');
 const Notification = require('../models/Notification');
 const { getSocketIO } = require('../services/socketService');
 const { sendPushNotification } = require('../services/firebaseService');
@@ -703,6 +704,55 @@ exports.markStudentSkipped = async (req, res) => {
     });
   } catch (error) {
     console.error('Mark student skipped error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// Get driver's manager
+exports.getManager = async (req, res) => {
+  try {
+    const driverId = req.driver._id;
+    const driverSid = req.driver.sid;
+
+    if (!driverSid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Driver does not have a school ID assigned'
+      });
+    }
+
+    // Find manager for driver's school
+    const manager = await Manager.findOne({ 
+      sid: driverSid, 
+      status: 'Active' 
+    }).select('_id name email phone image status sid');
+
+    if (!manager) {
+      return res.status(404).json({
+        success: false,
+        message: 'Manager not found for your school'
+      });
+    }
+
+    res.json({
+      success: true,
+      manager: {
+        _id: manager._id,
+        id: manager._id.toString(),
+        name: manager.name,
+        email: manager.email,
+        phone: manager.phone,
+        photo: manager.image || manager.photo || null, // Map image to photo
+        status: manager.status,
+        sid: manager.sid
+      }
+    });
+  } catch (error) {
+    console.error('Error getting manager for driver:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',

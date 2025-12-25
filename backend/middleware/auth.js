@@ -110,5 +110,54 @@ const verifyParent = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticate, authorize, verifyParent };
+// Verify driver authentication and active status
+// Note: This middleware should be used AFTER authenticate middleware
+const verifyDriver = async (req, res, next) => {
+  try {
+    // Check if user is authenticated (should be set by authenticate middleware)
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in again.'
+      });
+    }
+    
+    // Verify user is a driver
+    if (req.userRole !== 'driver') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This endpoint is only for drivers.'
+      });
+    }
+    
+    // Check if driver account is active
+    const driver = await Driver.findById(req.user._id);
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: 'Driver not found'
+      });
+    }
+    
+    if (driver.status && driver.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        message: `Driver account is ${driver.status}. Please contact administrator to activate your account.`
+      });
+    }
+    
+    // Attach driver to request for convenience
+    req.driver = driver;
+    
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+module.exports = { authenticate, authorize, verifyParent, verifyDriver };
 
