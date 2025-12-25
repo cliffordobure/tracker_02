@@ -30,6 +30,7 @@ const ManagerLayout = ({ children }) => {
     { name: 'Staff', path: '/manager/teachers', icon: '👨‍💼' },
     { name: 'Teachers by Class', path: '/manager/categorized-teachers', icon: '👩‍🏫' },
     { name: 'On Leave', path: '/manager/on-leave', icon: '🏖️' },
+    { name: 'Pending Requests', path: '/manager/pending-leave-requests', icon: '⏳' },
     { name: 'Inbox', path: '/manager/inbox', icon: '📥' },
     { name: 'Outbox', path: '/manager/outbox', icon: '📤' },
     { name: 'Notices', path: '/manager/notices', icon: '📢' },

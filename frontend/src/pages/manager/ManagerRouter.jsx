@@ -13,6 +13,7 @@ import Kids from './Kids'
 import Inbox from './Inbox'
 import Outbox from './Outbox'
 import OnLeave from './OnLeave'
+import PendingLeaveRequests from './PendingLeaveRequests'
 import CategorizedStudents from './CategorizedStudents'
 import CategorizedTeachers from './CategorizedTeachers'
 
@@ -33,6 +34,7 @@ const ManagerRouter = () => {
       <Route path="/reports" element={<Reports />} />
       <Route path="/kids" element={<Kids />} />
       <Route path="/on-leave" element={<OnLeave />} />
+      <Route path="/pending-leave-requests" element={<PendingLeaveRequests />} />
       <Route path="/inbox" element={<Inbox />} />
       <Route path="/outbox" element={<Outbox />} />
       <Route path="*" element={<Navigate to="/manager" replace />} />
