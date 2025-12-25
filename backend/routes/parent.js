@@ -2012,6 +2012,9 @@ router.post('/driver/rate', async (req, res) => {
 // Get student travel history
 router.get('/students/:studentId/history', parentController.getStudentHistory);
 
+// Get parent's leave requests
+router.get('/leave-requests', verifyParent, parentController.getLeaveRequests);
+
 // Request student leave (new implementation with LeaveRequest model)
 router.post('/students/:studentId/leave-request', verifyParent, parentController.requestStudentLeave);
 

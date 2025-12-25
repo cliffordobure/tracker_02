@@ -14,9 +14,158 @@ All backend endpoints for leave request approval/rejection and parent notificati
 
 ---
 
-## 🔌 New Backend Endpoints
+## 🔌 Backend Endpoints
 
-### 1. Review Leave Request (Manager)
+### For Parents
+
+#### 1. Get Parent's Leave Requests
+
+**Endpoint**: `GET /api/parent/leave-requests`
+
+**Authentication**: Required (JWT Bearer Token - Parent role)
+
+**Query Parameters** (all optional):
+- `studentId` (string): Filter by specific student ID
+- `status` (string): Filter by status - one of: `pending`, `approved`, `rejected`
+- `page` (number): Page number for pagination (default: 1)
+- `limit` (number): Number of items per page (default: 50)
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Leave requests retrieved successfully",
+  "data": [
+    {
+      "id": "leave_request_001",
+      "studentId": "student_123",
+      "studentName": "John Doe",
+      "studentGrade": "Grade 5",
+      "studentPhoto": "https://example.com/photo.jpg",
+      "startDate": "2024-01-20",
+      "endDate": "2024-01-22",
+      "reason": "Family vacation",
+      "status": "approved",
+      "reviewedBy": {
+        "id": "manager_456",
+        "name": "Manager Name"
+      },
+      "reviewedAt": "2024-01-16T10:00:00.000Z",
+      "reviewNotes": "Approved for family vacation",
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-16T10:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 10,
+    "page": 1,
+    "limit": 50,
+    "totalPages": 1
+  }
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Invalid status parameter
+- `403 Forbidden`: Student does not belong to parent (when studentId filter is used)
+- `404 Not Found`: Parent not found
+
+#### 2. Request Student Leave
+
+**Endpoint**: `POST /api/parent/students/:studentId/leave-request`
+
+**Authentication**: Required (JWT Bearer Token - Parent role)
+
+**Request Body**:
+```json
+{
+  "startDate": "2024-01-20",  // Required: ISO date format (YYYY-MM-DD)
+  "endDate": "2024-01-22",    // Required: ISO date format (YYYY-MM-DD)
+  "reason": "Family vacation" // Optional: Reason for leave
+}
+```
+
+**Success Response (201 Created)**:
+```json
+{
+  "success": true,
+  "message": "Leave request submitted successfully",
+  "data": {
+    "id": "leave_request_001",
+    "studentId": "student_123",
+    "startDate": "2024-01-20",
+    "endDate": "2024-01-22",
+    "reason": "Family vacation",
+    "status": "pending",
+    "createdAt": "2024-01-15T10:00:00.000Z"
+  }
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Missing required fields, invalid dates, or overlapping leave request
+- `404 Not Found`: Student not found or does not belong to parent
+
+#### 3. Get Student Travel History
+
+**Endpoint**: `GET /api/parent/students/:studentId/history`
+
+**Authentication**: Required (JWT Bearer Token - Parent role)
+
+**Query Parameters** (all optional):
+- `startDate` (string): Filter journeys from this date (ISO format)
+- `endDate` (string): Filter journeys to this date (ISO format)
+- `page` (number): Page number for pagination (default: 1)
+- `limit` (number): Number of items per page (default: 20)
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Travel history retrieved successfully",
+  "data": [
+    {
+      "id": "journey_001_picked",
+      "date": "2024-01-20",
+      "type": "picked",
+      "time": "2024-01-20T08:30:00.000Z",
+      "journeyId": "journey_001",
+      "journeyType": "morning",
+      "driverName": "John Driver",
+      "vehicleNumber": "ABC-123"
+    },
+    {
+      "id": "journey_001_dropped",
+      "date": "2024-01-20",
+      "type": "dropped",
+      "time": "2024-01-20T15:30:00.000Z",
+      "journeyId": "journey_001",
+      "journeyType": "evening",
+      "driverName": "John Driver",
+      "vehicleNumber": "ABC-123"
+    }
+  ],
+  "pagination": {
+    "total": 50,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 3
+  }
+}
+```
+
+**Event Types**:
+- `picked`: Student was picked up
+- `dropped`: Student was dropped off
+
+**Error Responses**:
+- `404 Not Found`: Student not found or does not belong to parent
+
+---
+
+### For Managers
+
+#### 1. Review Leave Request (Manager)
 
 **Endpoint**: `PUT /api/manager/leave-requests/:leaveRequestId/review`
 
@@ -49,7 +198,7 @@ All backend endpoints for leave request approval/rejection and parent notificati
 }
 ```
 
-### 2. Get Pending Leave Requests (Manager)
+#### 2. Get Pending Leave Requests (Manager)
 
 **Endpoint**: `GET /api/manager/leave-requests/pending`
 
@@ -361,6 +510,82 @@ class LeaveRequestNotificationHandler {
 }
 ```
 
+### Complete API Integration Example
+
+```dart
+// Leave Request Model
+class LeaveRequest {
+  final String id;
+  final String studentId;
+  final String studentName;
+  final String studentGrade;
+  final String? studentPhoto;
+  final String startDate;
+  final String endDate;
+  final String reason;
+  final String status; // 'pending', 'approved', 'rejected'
+  final Reviewer? reviewedBy;
+  final DateTime? reviewedAt;
+  final String? reviewNotes;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  LeaveRequest({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.studentGrade,
+    this.studentPhoto,
+    required this.startDate,
+    required this.endDate,
+    required this.reason,
+    required this.status,
+    this.reviewedBy,
+    this.reviewedAt,
+    this.reviewNotes,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory LeaveRequest.fromJson(Map<String, dynamic> json) {
+    return LeaveRequest(
+      id: json['id'] as String,
+      studentId: json['studentId'] as String,
+      studentName: json['studentName'] as String,
+      studentGrade: json['studentGrade'] as String,
+      studentPhoto: json['studentPhoto'] as String?,
+      startDate: json['startDate'] as String,
+      endDate: json['endDate'] as String,
+      reason: json['reason'] as String,
+      status: json['status'] as String,
+      reviewedBy: json['reviewedBy'] != null
+          ? Reviewer.fromJson(json['reviewedBy'] as Map<String, dynamic>)
+          : null,
+      reviewedAt: json['reviewedAt'] != null
+          ? DateTime.parse(json['reviewedAt'] as String)
+          : null,
+      reviewNotes: json['reviewNotes'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+    );
+  }
+}
+
+class Reviewer {
+  final String id;
+  final String name;
+
+  Reviewer({required this.id, required this.name});
+
+  factory Reviewer.fromJson(Map<String, dynamic> json) {
+    return Reviewer(
+      id: json['id'] as String,
+      name: json['name'] as String,
+    );
+  }
+}
+```
+
 ### Usage in Parent Screen
 
 ```dart
@@ -372,6 +597,8 @@ class ParentLeaveRequestsScreen extends StatefulWidget {
 
 class _ParentLeaveRequestsScreenState extends State<ParentLeaveRequestsScreen> {
   List<LeaveRequest> leaveRequests = [];
+  bool isLoading = false;
+  String? errorMessage;
   final notificationHandler = LeaveRequestNotificationHandler(
     socket: socket,
     onNotification: (type, data) {
@@ -419,8 +646,29 @@ class _ParentLeaveRequestsScreenState extends State<ParentLeaveRequestsScreen> {
   }
   
   Future<void> _loadLeaveRequests() async {
-    // Fetch leave requests from API
-    // GET /api/parent/leave-requests (if implemented)
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/parent/leave-requests'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          leaveRequests = (data['data'] as List)
+              .map((item) => LeaveRequest.fromJson(item))
+              .toList();
+        });
+      } else {
+        // Handle error
+        print('Failed to load leave requests: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error loading leave requests: $e');
+    }
   }
   
   @override
@@ -438,6 +686,150 @@ class _ParentLeaveRequestsScreenState extends State<ParentLeaveRequestsScreen> {
   
   Widget _buildLeaveRequestItem(LeaveRequest request) {
     // Build leave request item widget
+  }
+}
+```
+
+---
+
+## 📱 Travel History API Integration
+
+### Example: Fetching Student Travel History
+
+```dart
+class TravelHistoryScreen extends StatefulWidget {
+  final String studentId;
+  
+  TravelHistoryScreen({required this.studentId});
+
+  @override
+  _TravelHistoryScreenState createState() => _TravelHistoryScreenState();
+}
+
+class _TravelHistoryScreenState extends State<TravelHistoryScreen> {
+  List<TravelEvent> travelHistory = [];
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTravelHistory();
+  }
+
+  Future<void> _loadTravelHistory({
+    String? startDate,
+    String? endDate,
+    int page = 1,
+  }) async {
+    setState(() => isLoading = true);
+    
+    try {
+      final queryParams = <String, String>{
+        'page': page.toString(),
+        'limit': '20',
+      };
+      
+      if (startDate != null) queryParams['startDate'] = startDate;
+      if (endDate != null) queryParams['endDate'] = endDate;
+      
+      final uri = Uri.parse(
+        '$baseUrl/api/parent/students/${widget.studentId}/history'
+      ).replace(queryParameters: queryParams);
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          travelHistory = (data['data'] as List)
+              .map((item) => TravelEvent.fromJson(item))
+              .toList();
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          errorMessage = 'Failed to load travel history';
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Error: $e';
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Travel History')),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : travelHistory.isEmpty
+              ? Center(child: Text('No travel history found'))
+              : ListView.builder(
+                  itemCount: travelHistory.length,
+                  itemBuilder: (context, index) {
+                    final event = travelHistory[index];
+                    return ListTile(
+                      leading: Icon(
+                        event.type == 'picked' ? Icons.arrow_upward : Icons.arrow_downward,
+                        color: event.type == 'picked' ? Colors.green : Colors.blue,
+                      ),
+                      title: Text(
+                        event.type == 'picked' ? 'Picked Up' : 'Dropped Off'
+                      ),
+                      subtitle: Text(
+                        '${formatDateTime(event.time)}\n'
+                        'Driver: ${event.driverName}\n'
+                        'Vehicle: ${event.vehicleNumber}'
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class TravelEvent {
+  final String id;
+  final String date;
+  final String type; // 'picked' or 'dropped'
+  final DateTime time;
+  final String? journeyId;
+  final String? journeyType;
+  final String driverName;
+  final String vehicleNumber;
+
+  TravelEvent({
+    required this.id,
+    required this.date,
+    required this.type,
+    required this.time,
+    this.journeyId,
+    this.journeyType,
+    required this.driverName,
+    required this.vehicleNumber,
+  });
+
+  factory TravelEvent.fromJson(Map<String, dynamic> json) {
+    return TravelEvent(
+      id: json['id'] as String,
+      date: json['date'] as String,
+      type: json['type'] as String,
+      time: DateTime.parse(json['time'] as String),
+      journeyId: json['journeyId'] as String?,
+      journeyType: json['journeyType'] as String?,
+      driverName: json['driverName'] as String,
+      vehicleNumber: json['vehicleNumber'] as String,
+    );
   }
 }
 ```

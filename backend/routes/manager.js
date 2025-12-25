@@ -2139,7 +2139,7 @@ router.get('/leave-requests/pending', async (req, res) => {
     const formattedRequests = filteredRequests
       .filter(req => req.studentId && req.parentId) // Additional safety check
       .map(req => ({
-        id: req._id.toString(),
+      id: req._id.toString(),
         studentId: req.studentId?._id?.toString() || '',
         studentName: req.studentId?.name || 'Unknown',
         studentGrade: req.studentId?.grade || 'N/A',
@@ -2151,7 +2151,7 @@ router.get('/leave-requests/pending', async (req, res) => {
         reason: req.reason || '',
         status: req.status || 'pending',
         createdAt: req.createdAt || new Date()
-      }));
+    }));
 
     res.json({
       success: true,

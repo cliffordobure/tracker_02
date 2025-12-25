@@ -366,3 +366,106 @@ exports.activateStudent = async (req, res) => {
   }
 };
 
+// Get leave requests for parent
+exports.getLeaveRequests = async (req, res) => {
+  try {
+    console.log('[getLeaveRequests] Endpoint called');
+    const parentId = req.user._id;
+    console.log('[getLeaveRequests] Parent ID:', parentId);
+    const { studentId, status, page = 1, limit = 50 } = req.query;
+
+    // Build query - only get leave requests for this parent's students
+    const parent = await Parent.findById(parentId).select('students');
+    
+    if (!parent) {
+      return res.status(404).json({
+        success: false,
+        message: 'Parent not found'
+      });
+    }
+
+    const query = {
+      parentId: parentId
+    };
+
+    // Filter by student if provided
+    if (studentId) {
+      // Verify student belongs to parent
+      if (!parent.students.includes(studentId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Student does not belong to you.'
+        });
+      }
+      query.studentId = studentId;
+    } else {
+      // Only show leave requests for parent's students
+      query.studentId = { $in: parent.students };
+    }
+
+    // Filter by status if provided
+    if (status) {
+      if (!['pending', 'approved', 'rejected'].includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid status. Must be one of: pending, approved, rejected'
+        });
+      }
+      query.status = status;
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Find leave requests with pagination
+    const leaveRequests = await LeaveRequest.find(query)
+      .populate('studentId', 'name grade photo')
+      .populate('reviewedBy', 'name')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await LeaveRequest.countDocuments(query);
+
+    // Format the response
+    const formattedRequests = leaveRequests.map(req => ({
+      id: req._id.toString(),
+      studentId: req.studentId._id.toString(),
+      studentName: req.studentId.name,
+      studentGrade: req.studentId.grade || 'N/A',
+      studentPhoto: req.studentId.photo || null,
+      startDate: req.startDate.toISOString().split('T')[0],
+      endDate: req.endDate.toISOString().split('T')[0],
+      reason: req.reason || '',
+      status: req.status,
+      reviewedBy: req.reviewedBy ? {
+        id: req.reviewedBy._id.toString(),
+        name: req.reviewedBy.name
+      } : null,
+      reviewedAt: req.reviewedAt ? req.reviewedAt.toISOString() : null,
+      reviewNotes: req.reviewNotes || null,
+      createdAt: req.createdAt.toISOString(),
+      updatedAt: req.updatedAt.toISOString()
+    }));
+
+    res.json({
+      success: true,
+      message: 'Leave requests retrieved successfully',
+      data: formattedRequests,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get leave requests error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
