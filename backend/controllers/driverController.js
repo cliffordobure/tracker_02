@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const { getSocketIO } = require('../services/socketService');
 const { sendPushNotification } = require('../services/firebaseService');
 const { emitNotification } = require('../utils/socketHelper');
+const { getPhotoUrl } = require('../utils/photoHelper');
 
 // Helper function to calculate speed using Haversine formula
 function calculateSpeed(lat1, lon1, lat2, lon2, timeDiffSeconds) {
@@ -747,7 +748,7 @@ exports.getManager = async (req, res) => {
         name: manager.name,
         email: manager.email,
         phone: manager.phone,
-        photo: manager.image || manager.photo || null, // Map image to photo
+        photo: getPhotoUrl(manager.image || manager.photo || null), // Map image to photo
         status: manager.status,
         sid: manager.sid
       }
@@ -882,14 +883,14 @@ exports.getParents = async (req, res) => {
           name: parent.name,
           email: parent.email,
           phone: parent.phone || null,
-          photo: parent.photo || null,
+          photo: getPhotoUrl(parent.photo || null),
           status: parent.status,
           students: students.map(student => ({
             _id: student._id,
             id: student._id.toString(),
             name: student.name,
             grade: student.grade || null,
-            photo: student.photo || null,
+            photo: getPhotoUrl(student.photo || null),
             status: student.status
           })),
           sid: parent.sid ? parent.sid.toString() : null
@@ -976,7 +977,7 @@ exports.getStudents = async (req, res) => {
       id: student._id.toString(),
       name: student.name,
       grade: student.grade || null,
-      photo: student.photo || null,
+      photo: getPhotoUrl(student.photo || null),
       status: student.status,
       parents: (student.parents || []).map(parent => ({
         _id: parent._id,
@@ -984,7 +985,7 @@ exports.getStudents = async (req, res) => {
         name: parent.name,
         email: parent.email,
         phone: parent.phone || null,
-        photo: parent.photo || null
+        photo: getPhotoUrl(parent.photo || null)
       }))
     }));
 
@@ -1045,7 +1046,7 @@ exports.updateProfile = async (req, res) => {
         name: driver.name,
         email: driver.email,
         phone: driver.phone || null,
-        photo: driver.photo || null,
+        photo: getPhotoUrl(driver.photo || null),
         vehicle: driver.vehicleNumber,
         vehicleNumber: driver.vehicleNumber,
         role: 'driver',

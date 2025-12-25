@@ -13,6 +13,7 @@ const DriverRating = require('../models/DriverRating');
 const Staff = require('../models/Staff');
 const { sendPushNotification, sendToDevice } = require('../services/firebaseService');
 const { getSocketIO } = require('../services/socketService');
+const { getPhotoUrl } = require('../utils/photoHelper');
 
 router.use(authenticate);
 
@@ -70,7 +71,7 @@ const formatRoute = (route) => {
       id: route.driver._id,
       name: route.driver.name,
       phone: route.driver.phone,
-      photo: route.driver.photo,
+      photo: getPhotoUrl(route.driver.photo),
       vehicleNumber: route.driver.vehicleNumber,
       location: {
         latitude: route.driver.latitude,
@@ -97,26 +98,13 @@ router.get('/profile', async (req, res) => {
       });
     }
 
-    // Build full photo URL if photo exists
-    let photoUrl = null;
-    if (parent.photo) {
-      // Check if it's already a full URL
-      if (parent.photo.startsWith('http://') || parent.photo.startsWith('https://')) {
-        photoUrl = parent.photo;
-      } else {
-        // Construct full URL from request or use environment variable
-        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-        photoUrl = `${baseUrl}${parent.photo.startsWith('/') ? '' : '/'}${parent.photo}`;
-      }
-    }
-
     // Return profile in specified format
     const profileData = {
       id: parent._id.toString(),
       name: parent.name,
       email: parent.email || null,
       phone: parent.phone || null,
-      photo: photoUrl,
+      photo: getPhotoUrl(parent.photo),
       role: 'parent',
       sid: parent.sid ? parent.sid.toString() : null
     };
@@ -241,7 +229,7 @@ router.get('/students', async (req, res) => {
         id: student._id.toString(),
         _id: student._id.toString(),
         name: student.name,
-        photo: student.photo,
+        photo: getPhotoUrl(student.photo),
         grade: student.grade,
         address: student.address,
         latitude: student.latitude,
@@ -307,7 +295,7 @@ router.get('/students/:studentId/status', async (req, res) => {
       student: {
         id: student._id,
         name: student.name,
-        photo: student.photo,
+        photo: getPhotoUrl(student.photo),
         grade: student.grade,
         address: student.address,
         latitude: student.latitude,
@@ -510,7 +498,7 @@ router.get('/students/:studentId/driver-location', async (req, res) => {
         id: driver._id.toString(),
         name: driver.name,
         phone: driver.phone,
-        photo: driver.photo,
+        photo: getPhotoUrl(driver.photo),
         vehicleNumber: driver.vehicleNumber,
         location: {
           latitude: driver.latitude,
@@ -570,13 +558,6 @@ router.put('/profile', async (req, res) => {
 
     await parent.save();
 
-    // Build full photo URL if photo exists
-    let photoUrl = parent.photo || null;
-    if (photoUrl && !photoUrl.startsWith('http://') && !photoUrl.startsWith('https://')) {
-      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-      photoUrl = `${baseUrl}${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
-    }
-
     res.json({
       success: true,
       message: 'Profile updated successfully',
@@ -585,7 +566,7 @@ router.put('/profile', async (req, res) => {
         name: parent.name,
         email: parent.email,
         phone: parent.phone || null,
-        photo: photoUrl,
+        photo: getPhotoUrl(parent.photo),
         role: 'parent',
         sid: parent.sid ? parent.sid.toString() : null
       }

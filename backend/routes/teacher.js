@@ -10,6 +10,7 @@ const Parent = require('../models/Parent');
 const Notification = require('../models/Notification');
 const { getSocketIO } = require('../services/socketService');
 const { sendToDevice } = require('../services/firebaseService');
+const { getPhotoUrl } = require('../utils/photoHelper');
 
 router.use(authenticate);
 
@@ -42,17 +43,6 @@ router.get('/profile', verifyTeacher, async (req, res) => {
       });
     }
 
-    // Build full photo URL
-    let photoUrl = null;
-    if (teacher.photo) {
-      if (teacher.photo.startsWith('http://') || teacher.photo.startsWith('https://')) {
-        photoUrl = teacher.photo;
-      } else {
-        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-        photoUrl = `${baseUrl}${teacher.photo.startsWith('/') ? '' : '/'}${teacher.photo}`;
-      }
-    }
-
     res.json({
       success: true,
       message: 'Profile retrieved successfully',
@@ -61,7 +51,7 @@ router.get('/profile', verifyTeacher, async (req, res) => {
         name: teacher.name,
         email: teacher.email,
         phone: teacher.phone,
-        photo: photoUrl,
+        photo: getPhotoUrl(teacher.photo),
         role: 'teacher',
         sid: teacher.sid?._id || teacher.sid,
         schoolName: teacher.sid?.name,

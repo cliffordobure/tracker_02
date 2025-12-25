@@ -11,6 +11,7 @@ const { getSocketIO } = require('../services/socketService');
 const { sendPushNotification } = require('../services/firebaseService');
 const journeyController = require('../controllers/journeyController');
 const driverController = require('../controllers/driverController');
+const { getPhotoUrl } = require('../utils/photoHelper');
 
 router.use(authenticate);
 
@@ -40,7 +41,7 @@ router.get('/profile', async (req, res) => {
         name: driver.name,
         email: driver.email,
         phone: driver.phone || null,
-        photo: driver.photo || null,
+        photo: getPhotoUrl(driver.photo || null),
         vehicle: driver.vehicleNumber,
         vehicleNumber: driver.vehicleNumber,
         role: 'driver',

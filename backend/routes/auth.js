@@ -9,6 +9,7 @@ const Parent = require('../models/Parent');
 const Driver = require('../models/Driver');
 const Staff = require('../models/Staff');
 const PasswordResetToken = require('../models/PasswordResetToken');
+const { getPhotoUrl } = require('../utils/photoHelper');
 
 // Generate JWT Token
 const generateToken = (userId, role) => {
@@ -181,7 +182,7 @@ router.post('/parent/login', async (req, res) => {
         id: parent._id,
         name: parent.name,
         email: parent.email,
-        photo: parent.photo,
+        photo: getPhotoUrl(parent.photo),
         role: 'parent'
       }
     });
@@ -238,7 +239,7 @@ router.post('/driver/login', async (req, res) => {
         id: driver._id,
         name: driver.name,
         email: driver.email,
-        photo: driver.photo,
+        photo: getPhotoUrl(driver.photo),
         role: 'driver',
         sid: driver.sid
       }
@@ -301,7 +302,7 @@ router.post('/teacher/login', async (req, res) => {
         id: teacher._id,
         name: teacher.name,
         email: teacher.email,
-        photo: teacher.photo,
+        photo: getPhotoUrl(teacher.photo),
         role: 'teacher',
         sid: teacher.sid,
         assignedClass: teacher.assignedClass,
