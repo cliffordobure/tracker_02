@@ -1,6 +1,7 @@
 const Student = require('../models/Student');
 const Journey = require('../models/Journey');
 const Driver = require('../models/Driver');
+const Parent = require('../models/Parent');
 const LeaveRequest = require('../models/LeaveRequest');
 const Manager = require('../models/Manager');
 const { getSocketIO } = require('../services/socketService');
