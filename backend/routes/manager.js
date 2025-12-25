@@ -2092,32 +2092,66 @@ router.put('/leave-requests/:leaveRequestId/review', async (req, res) => {
 // Get pending leave requests for manager's school
 router.get('/leave-requests/pending', async (req, res) => {
   try {
+    // Check if manager has school ID
+    if (!req.user || !req.user.sid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Manager school ID not found'
+      });
+    }
+
+    const managerSid = req.user.sid.toString();
+
+    // First, get all student IDs in this manager's school
+    const studentsInSchool = await Student.find({
+      sid: managerSid,
+      isdelete: false
+    }).select('_id');
+
+    const studentIds = studentsInSchool.map(s => s._id);
+
+    // If no students in school, return empty array
+    if (studentIds.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Pending leave requests retrieved successfully',
+        data: []
+      });
+    }
+
+    // Query leave requests only for students in this school
     const leaveRequests = await LeaveRequest.find({
-      status: 'pending'
+      status: 'pending',
+      studentId: { $in: studentIds }
     })
       .populate('studentId', 'name grade photo sid')
       .populate('parentId', 'name email phone')
       .sort({ createdAt: -1 });
 
-    // Filter by manager's school
-    const filteredRequests = leaveRequests.filter(
-      req => req.studentId && req.studentId.sid && req.studentId.sid.toString() === req.user.sid.toString()
-    );
+    // Additional filter to ensure populated student has sid (safety check)
+    const filteredRequests = leaveRequests.filter((leaveReq) => {
+      if (!leaveReq.studentId || !leaveReq.parentId) return false;
+      if (!leaveReq.studentId.sid) return false;
+      return leaveReq.studentId.sid.toString() === managerSid;
+    });
 
-    const formattedRequests = filteredRequests.map(req => ({
-      id: req._id.toString(),
-      studentId: req.studentId._id.toString(),
-      studentName: req.studentId.name,
-      studentGrade: req.studentId.grade,
-      parentId: req.parentId._id.toString(),
-      parentName: req.parentId.name,
-      parentEmail: req.parentId.email,
-      startDate: req.startDate.toISOString().split('T')[0],
-      endDate: req.endDate.toISOString().split('T')[0],
-      reason: req.reason,
-      status: req.status,
-      createdAt: req.createdAt
-    }));
+    // Format requests with safe property access
+    const formattedRequests = filteredRequests
+      .filter(req => req.studentId && req.parentId) // Additional safety check
+      .map(req => ({
+        id: req._id.toString(),
+        studentId: req.studentId?._id?.toString() || '',
+        studentName: req.studentId?.name || 'Unknown',
+        studentGrade: req.studentId?.grade || 'N/A',
+        parentId: req.parentId?._id?.toString() || '',
+        parentName: req.parentId?.name || 'Unknown',
+        parentEmail: req.parentId?.email || '',
+        startDate: req.startDate ? req.startDate.toISOString().split('T')[0] : '',
+        endDate: req.endDate ? req.endDate.toISOString().split('T')[0] : '',
+        reason: req.reason || '',
+        status: req.status || 'pending',
+        createdAt: req.createdAt || new Date()
+      }));
 
     res.json({
       success: true,
